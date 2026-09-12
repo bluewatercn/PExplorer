@@ -311,6 +311,28 @@ static void InitInstance(HINSTANCE hInstance)
 
 extern void send_wxs_protocol_url(PWSTR pszName);
 
+static void InitDarkMode()
+{
+    HMODULE hUxTheme = LoadLibrary(TEXT("uxtheme.dll"));
+    if (!hUxTheme)
+        return;
+
+    typedef int (WINAPI* SetPreferredAppMode_t)(int);
+
+    SetPreferredAppMode_t SetPreferredAppMode =
+        (SetPreferredAppMode_t)GetProcAddress(
+            hUxTheme,
+            MAKEINTRESOURCEA(135)
+        );
+
+    if (SetPreferredAppMode) {
+        // 1 = AllowDark
+        SetPreferredAppMode(1);
+    }
+
+    FreeLibrary(hUxTheme);
+}
+
 int explorer_main(HINSTANCE hInstance, LPTSTR lpCmdLine, LPCTSTR lpOption, int cmdShow)
 {
     CONTEXT("explorer_main");
@@ -626,6 +648,9 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdL
 
     // Initializes COM
     CoInitialize(NULL);
+
+    // initialize Windows dark-mode menu support
+    InitDarkMode();
 
     if (_tcsstr(ext_options, TEXT("-color"))) {
         UpdateSysColor(lpCmdLineOrg);
