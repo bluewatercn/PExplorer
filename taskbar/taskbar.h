@@ -53,10 +53,12 @@ struct TaskBarEntry {
     int     _id;    // ID for WM_COMMAND
     HBITMAP _hbmp;
     int     _bmp_idx;
-    int     _used;
+//    int     _used;
     int     _btn_idx;
     String  _title;
     BYTE    _fsState;
+    bool    _flash;
+    bool    _flashOn;
 };
 
 /// map for managing the task bar buttons, mapped by application window handle
@@ -100,7 +102,14 @@ protected:
 
     static BOOL CALLBACK EnumWndProc(HWND hwnd, LPARAM lparam);
 
+    BOOL AddWindow(HWND hwnd);
+    BOOL RemoveWindow(HWND hwnd);
+    BOOL UpdateWindow(HWND hwnd);
     void    ApplyBackgroundStyle();
     void    Refresh();
     void    ResizeButtons();
+    void UpdateActiveWindow(HWND hwndActivated);
 };
+
+
+

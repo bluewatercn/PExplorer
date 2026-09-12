@@ -189,7 +189,7 @@ protected:
 
     void    UpdateIcons();
     void    Paint();
-    void    Refresh(bool do_refresh = false);
+ //   void    Refresh(bool do_refresh = false);
     void    CancelModes();
 
     NotifyIconSet::iterator IconHitTest(const POINT &pos);
@@ -270,6 +270,7 @@ struct ClockWindow : public Window {
     typedef Window super;
 
     ClockWindow(HWND hwnd);
+    ~ClockWindow();
 
     static HWND Create(HWND hwndParent);
 
@@ -284,6 +285,13 @@ protected:
 
     TCHAR   _time[32];
     ToolTip _tooltip;
+    RECT _oldTextRect;
+    RECT _newTextRect;
+    //newadd
+    HBITMAP _hBackgroundBmp;
+    HDC _hBackgroundDC;
+    int _backgroundWidth;
+    int _backgroundHeight;
 };
 
 #define SHOWDESKTOPBUTTON_WIDTH DPI_SX(5)

@@ -13,7 +13,7 @@ Lua CJSON
 ----------------------------------------------------------------------------------------
 
 :MAIN
-set "MSBUILD=D:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe"
+set "MSBUILD=C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
 
 set LUA=lua-5.4.7
 set LUA_CJSON=lua-cjson-2.1.0

@@ -541,7 +541,7 @@ NotifyArea::NotifyArea(HWND hwnd)
 
 NotifyArea::~NotifyArea()
 {
-    KillTimer(_hwnd, 0);
+  //  KillTimer(_hwnd, 0);
 
     write_config();
 }
@@ -631,7 +631,7 @@ LRESULT NotifyArea::Init(LPCREATESTRUCT pcs)
 
     read_config();
 
-    SetTimer(_hwnd, 0, 1000, NULL);
+    //SetTimer(_hwnd, 0, 1000, NULL);
 
     return 0;
 }
@@ -686,18 +686,16 @@ static BOOL TrayNotifyMessage(HWND hwnd, const NotifyInfo &entry, LPARAM lparam,
 #endif
 
         if (lparam == WM_LBUTTONUP) {
-            if (IsSameGUID(&entry._guid, &(SYS_TRAYICON_VOLUME))) {
-                if (JCFG2_DEF("JS_NOTIFYAREA", "handle_system_volume", true).ToBool() != FALSE) {
-                    gLuaCall("wxs_ui", TEXT("volume"));
-                    return TRUE;
-                }
-            }
-            else if (IsSameGUID(&entry._guid, &(SYS_TRAYICON_NETWORK))) {
-                if (JCFG2_DEF("JS_NOTIFYAREA", "handle_system_network", true).ToBool() != FALSE) {
-                    gLuaCall("wxs_ui", TEXT("wifi"));
-                    return TRUE;
-                }
-            }
+if (IsSameGUID(&entry._guid, &(SYS_TRAYICON_VOLUME))) {
+    if (CommandHook(hwnd, TEXT("volumearea_click"), TEXT("JS_DAEMON"))) {
+        return TRUE;
+    }
+}
+else if (IsSameGUID(&entry._guid, &(SYS_TRAYICON_NETWORK))) {
+    if (CommandHook(hwnd, TEXT("networkarea_click"), TEXT("JS_DAEMON"))) {
+        return TRUE;
+    }
+}
         }
 
         //if (lparam == NIN_SELECT) lparam = NIN_KEYSELECT;
@@ -726,18 +724,20 @@ LRESULT NotifyArea::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
         Paint();
         break;
 
+/*
     case WM_TIMER: {
         Refresh();
 
-        ClockWindow *clock_window = GET_WINDOW(ClockWindow, _hwndClock);
+        //ClockWindow *clock_window = GET_WINDOW(ClockWindow, _hwndClock);
 
-        if (clock_window)
-            clock_window->TimerTick();
+        //if (clock_window)
+        //    clock_window->TimerTick();
         break;
     }
-
+*/
     case PM_REFRESH:
-        Refresh(true);
+        //Refresh(true);
+        UpdateIcons();
         break;
 
     case WM_SIZE: {
@@ -786,6 +786,7 @@ LRESULT NotifyArea::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
 
         if (_hook.ModulePathCopyData(lparam, &hwnd, path))
             _window_modules[hwnd] = path;
+            UpdateIcons();
         break;
     }
 #endif
@@ -830,7 +831,7 @@ LRESULT NotifyArea::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
 
                 // Notify the message if the owner is still alive
                 if (IsWindow(entry._hWnd)) {
-                    if (//nmsg == WM_MOUSEMOVE ||
+                    if (nmsg == WM_MOUSEMOVE ||
                         nmsg == WM_LBUTTONDOWN || nmsg == WM_LBUTTONUP || nmsg == WM_LBUTTONDBLCLK ||
                         nmsg == WM_MBUTTONDOWN || nmsg == WM_MBUTTONUP || nmsg == WM_MBUTTONDBLCLK ||
 #ifdef WM_XBUTTONDOWN
@@ -994,6 +995,25 @@ LRESULT NotifyArea::ProcessTrayNotification(int notify_code, NOTIFYICONDATA *pni
     switch (notify_code) {
     case NIM_ADD:
     case NIM_MODIFY: {
+
+        // 清理已经失效的托盘图标
+        for (NotifyIconMap::iterator it = _icon_map.begin();
+            it != _icon_map.end(); ) {
+
+            NotifyInfo& old_entry = it->second;
+
+            if (!IsWindow(old_entry._hWnd)) {
+                if (old_entry._hIcon)
+                    DestroyIcon(old_entry._hIcon);
+
+                it = _icon_map.erase(it);
+                changes = true;
+            }
+            else {
+                ++it;
+            }
+        }
+
         // special handling for windows Task Manager
         UINT uid = GET_NID_uID(pnid);
         if ((INT32)uid < 0) { // handle Task Manager's uIDs - 0xffffffff~0xfffffff4
@@ -1007,7 +1027,7 @@ LRESULT NotifyArea::ProcessTrayNotification(int notify_code, NOTIFYICONDATA *pni
         if (entry._idx == -1)
             entry._idx = ++_next_idx;
 
-        bool changes = entry.modify((void *)pnid);
+        bool entry_changes = entry.modify((void*)pnid);
 
         if (NIM_ADD == notify_code) {
             if (GetTrayIconState(entry) & NIS_IGNORED) {
@@ -1015,14 +1035,31 @@ LRESULT NotifyArea::ProcessTrayNotification(int notify_code, NOTIFYICONDATA *pni
             }
         }
 
-#if NOTIFYICON_VERSION>=3   // as of 21.08.2003 missing in MinGW headers
-        if (DetermineHideState(entry) && entry._mode == NIM_HIDE) {
-            entry._dwState |= NIS_HIDDEN;
-            changes = true;
+#if NOTIFYICON_VERSION>=3
+        if (DetermineHideState(entry)) {
+            switch (entry._mode) {
+            case NIM_HIDE:
+                if (!(entry._dwState & NIS_HIDDEN)) {
+                    entry._dwState |= NIS_HIDDEN;
+                    changes = true;
+                }
+                break;
+
+            case NIM_SHOW:
+                if (entry._dwState & NIS_HIDDEN) {
+                    entry._dwState &= ~NIS_HIDDEN;
+                    changes = true;
+                }
+                break;
+
+            case NIM_AUTO:
+                // 暂时保持当前状态，自动隐藏稍后单独处理
+                break;
+            }
         }
 #endif
 
-        if (changes)
+        if (changes || entry_changes)
             UpdateIcons();  ///@todo call only if really changes occurred
 
         return TRUE;
@@ -1165,57 +1202,26 @@ void NotifyArea::Paint()
         x += NOTIFYICON_DIST;
     }
 }
-
+/*
 void NotifyArea::Refresh(bool update)
 {
-    // Look for task icons without valid owner window.
-    // This is an extended feature missing in MS Windows.
-    for (NotifyIconSet::const_iterator it = _sorted_icons.begin(); it != _sorted_icons.end(); ++it) {
-        const NotifyInfo &entry = *it;
+/*    for (NotifyIconSet::const_iterator it = _sorted_icons.begin();
+        it != _sorted_icons.end();
+        ++it) {
 
-        if (!IsWindow(entry._hWnd))
-            if (_icon_map.erase(entry)) // delete icons without valid owner window
+        const NotifyInfo& entry = *it;
+
+        if (!IsWindow(entry._hWnd)) {
+            if (_icon_map.erase(entry))
                 ++update;
-    }
-
-    DWORD now = GetTickCount();
-
-    // handle icon hiding
-    for (NotifyIconMap::iterator it = _icon_map.begin(); it != _icon_map.end(); ++it) {
-        NotifyInfo &entry = it->second;
-
-        DetermineHideState(entry);
-
-        switch (entry._mode) {
-        case NIM_HIDE:
-            if (!(entry._dwState & NIS_HIDDEN)) {
-                entry._dwState |= NIS_HIDDEN;
-                ++update;
-            }
-            break;
-
-        case NIM_SHOW:
-            if (entry._dwState & NIS_HIDDEN) {
-                entry._dwState &= ~NIS_HIDDEN;
-                ++update;
-            }
-            break;
-
-        case NIM_AUTO:
-            // automatically hide icons after long periods of inactivity
-            if (_hide_inactive)
-                if (!(entry._dwState & NIS_HIDDEN))
-                    if (now - entry._lastChange > ICON_AUTOHIDE_SECONDS * 1000) {
-                        entry._dwState |= NIS_HIDDEN;
-                        ++update;
-                    }
-            break;
         }
     }
 
     if (update)
         UpdateIcons();
+
 }
+*/
 
 /// search for a icon at a given client coordinate position
 NotifyIconSet::iterator NotifyArea::IconHitTest(const POINT &pos)
@@ -1368,7 +1374,7 @@ TrayNotifyDlg::TrayNotifyDlg(HWND hwnd)
 
     _resize_mgr.Resize(+150, +200);
 
-    Refresh();
+    //Refresh();
 
     SetTimer(_hwnd, 0, 3000, NULL);
     register_pretranslate(hwnd);
@@ -1517,7 +1523,7 @@ LRESULT TrayNotifyDlg::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
     }
 
     case WM_TIMER:
-        Refresh();
+       // Refresh();
         break;
 
     default:
@@ -1532,7 +1538,7 @@ int TrayNotifyDlg::Command(int id, int code)
     if (code == BN_CLICKED) {
         switch (id) {
         case ID_REFRESH:
-            Refresh();
+            //Refresh();
             break;
 
         case IDC_NOTIFY_SHOW:
@@ -1683,19 +1689,44 @@ void TrayNotifyDlg::SetIconMode(NOTIFYICONMODE mode)
         }
     }
 
-    Refresh();
+   // Refresh();
     ///@todo select treeview item at new position in tree view -> refresh HTREEITEM in _selectedItem
 }
 
 
+#define CLOCK_UPDATE_TIMER 1002
+
 ClockWindow::ClockWindow(HWND hwnd)
-    :  super(hwnd),
-       _tooltip(hwnd)
+    : super(hwnd),
+    _tooltip(hwnd)
 {
+    _hBackgroundBmp = NULL;
+    _hBackgroundDC = NULL;
+    _backgroundWidth = 0;
+    _backgroundHeight = 0;
+
+    _oldTextRect = { 0, 0, 0, 0 };
+    _newTextRect = { 0, 0, 0, 0 };
+
     *_time = TEXT('\0');
     FormatTime();
 
     _tooltip.add(_hwnd, _hwnd);
+
+    SetTimer(_hwnd, CLOCK_UPDATE_TIMER, 1000, NULL);
+}
+
+ClockWindow::~ClockWindow()
+{
+    if (_hBackgroundDC) {
+        DeleteDC(_hBackgroundDC);
+        _hBackgroundDC = NULL;
+    }
+
+    if (_hBackgroundBmp) {
+        DeleteObject(_hBackgroundBmp);
+        _hBackgroundBmp = NULL;
+    }
 }
 
 HWND ClockWindow::Create(HWND hwndParent)
@@ -1760,9 +1791,14 @@ LRESULT ClockWindow::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
         break;
     case  WM_TIMER:
         if (wparam == CLOCKAREA_CLICK_TIMER) {
-            ClockArea_OnClick(_hwnd, (isDbClick>1) ? 1 : 0);
+            ClockArea_OnClick(_hwnd, (isDbClick > 1) ? 1 : 0);
             isDbClick = 0;
             return S_OK;
+        }
+
+        if (wparam == CLOCK_UPDATE_TIMER) {
+            TimerTick();
+            return 0;
         }
         /* fallthough */
     default:
@@ -1781,7 +1817,7 @@ int ClockWindow::Notify(int id, NMHDR *pnmh)
         TCHAR buffer[64];
 
         GetLocalTime(&systime);
-
+        
         if (GetDateFormat(LOCALE_USER_DEFAULT, DATE_LONGDATE, &systime, NULL, buffer, 64))
             _tcscpy(pdi->szText, buffer);
         else
@@ -1794,7 +1830,7 @@ int ClockWindow::Notify(int id, NMHDR *pnmh)
 void ClockWindow::TimerTick()
 {
     if (FormatTime())
-        InvalidateRect(_hwnd, NULL, TRUE);  // refresh displayed time
+        InvalidateRect(_hwnd, NULL, FALSE);  // refresh displayed time
 }
 
 bool ClockWindow::FormatTime()
@@ -1835,23 +1871,95 @@ void ClockWindow::Paint()
 
     PaintCanvas canvas(_hwnd);
 
-    FillRect(canvas, &canvas.rcPaint, TASKBAR_BRUSH());
-
     BkMode bkmode(canvas, TRANSPARENT);
     FontSelection font(canvas, g_Globals._hDefaultFont);
     SetTextColor(canvas, CLOCK_TEXT_COLOR());
+
     if (!inited) {
         inited = true;
+
         rc = ClientRect(_hwnd);
-        RECT rc_text = { 0, 0 };
-        DrawText(canvas, _time, -1, &rc_text, DT_CENTER | DT_NOPREFIX | DT_CALCRECT);
-        //rc_text.right = DPI_SX(rc_text.right);
-        //rc_text.bottom = DPI_SY(rc_text.bottom);
-        rc.top += (rc.bottom - rc_text.bottom) / 2;
+
+        RECT textSize = { 0, 0, 0, 0 };
+
+        DrawText(
+            canvas,
+            _time,
+            -1,
+            &textSize,
+            DT_CENTER | DT_NOPREFIX | DT_CALCRECT
+        );
+
+        rc.top +=
+            (rc.bottom - rc.top - textSize.bottom) / 2;
     }
 
-    DrawText(canvas, _time, -1, &rc, DT_CENTER | DT_NOPREFIX);
+    /*
+     * Calculate the new text size
+     */
+    RECT textSize = { 0, 0, 0, 0 };
+
+    DrawText(
+        canvas,
+        _time,
+        -1,
+        &textSize,
+        DT_CENTER | DT_NOPREFIX | DT_CALCRECT
+    );
+
+    int textWidth =
+        textSize.right - textSize.left;
+
+    int textHeight =
+        textSize.bottom - textSize.top;
+
+    /*
+     * Calculate the new text rectangle
+     */
+    _newTextRect.left =
+        rc.left +
+        ((rc.right - rc.left) - textWidth) / 2;
+
+    _newTextRect.top =
+        rc.top;
+
+    _newTextRect.right =
+        _newTextRect.left + textWidth;
+
+    _newTextRect.bottom =
+        _newTextRect.top + textHeight;
+
+    /*
+     * Clear the previous text
+     */
+    if (_oldTextRect.right > _oldTextRect.left &&
+        _oldTextRect.bottom > _oldTextRect.top) {
+
+        FillRect(
+            canvas,
+            &_oldTextRect,
+            TASKBAR_BRUSH()
+        );
+    }
+
+    /*
+     * Draw new text
+     */
+    DrawText(
+        canvas,
+        _time,
+        -1,
+        &_newTextRect,
+        DT_CENTER | DT_NOPREFIX
+    );
+
+    /*
+     * Save current text rectangle
+     */
+    _oldTextRect = _newTextRect;
 }
+
+
 
 ShowDesktopButtonWindow::ShowDesktopButtonWindow(HWND hwnd)
     : super(hwnd)

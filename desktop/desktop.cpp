@@ -314,8 +314,18 @@ LRESULT DesktopWindow::Init(LPCREATESTRUCT pcs)
     if (super::Init(pcs))
         return 1;
 
-    HRESULT hr = GetDesktopFolder()->CreateViewObject(_hwnd, IID_IShellView, (void **)&_pShellView);
-    /* also possible:
+    HRESULT hr =
+        GetDesktopFolder()->CreateViewObject(
+            _hwnd,
+            IID_IShellView,
+            (void**)&_pShellView
+        );
+
+    if (FAILED(hr) || !_pShellView)
+    {
+        _pShellView = NULL;
+        return 1;
+    }    /* also possible:
         SFV_CREATE sfv_create;
 
         sfv_create.cbSize = sizeof(SFV_CREATE);
@@ -338,6 +348,13 @@ LRESULT DesktopWindow::Init(LPCREATESTRUCT pcs)
         ClientRect rect(_hwnd);
 
         hr = _pShellView->CreateViewWindow(NULL, &fs, this, &rect, &hWndView);
+
+        if (FAILED(hr) || !hWndView)
+        {
+            _pShellView->Release();
+            _pShellView = NULL;
+            return 1;
+        }
 
         ///@todo use IShellBrowser::GetViewStateStream() to restore previous view state -> see SHOpenRegStream()
 
@@ -943,6 +960,7 @@ LRESULT DesktopShellView::LoadWallpaper(BOOL fInitial)
 
     // need to repaint whole thing, so invalidate entire desktop window
     //InvalidateRect(_hwnd, NULL, TRUE);
+    InvalidateRect(_hwnd, NULL, TRUE);
     return TRUE;
 }
 
@@ -997,14 +1015,18 @@ void DesktopShellView::DrawDesktopBkgnd(HDC hdc)
 
 static BOOL UpdateWallpaper()
 {
-    static TCHAR lastWPPath[MAX_PATH] = { 0 };
     TCHAR wpPath[MAX_PATH] = { 0 };
-    if (!SystemParametersInfo(SPI_GETDESKWALLPAPER, MAX_PATH, wpPath, 0)) return FALSE;
-    if (lstrcmpi(lastWPPath, wpPath) == 0) return FALSE;
-    lstrcpy(lastWPPath, wpPath);
-    LOG(lastWPPath);
+
+    if (!SystemParametersInfo(
+        SPI_GETDESKWALLPAPER,
+        MAX_PATH,
+        wpPath,
+        0))
+        return FALSE;
+
     String strWallpaper(wpPath);
     SET_JCFG2("JS_DESKTOP", "wallpaper") = strWallpaper;
+
     return TRUE;
 }
 
@@ -1020,6 +1042,25 @@ LRESULT DesktopShellView::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
                 return 0;
             }
         }
+        if (tid == ID_TIMER_RELOAD_WALLPAPER) {
+            KillTimer(_hwnd, tid);
+
+            if (UpdateWallpaper()) {
+                LoadWallpaper(TRUE);
+
+                RedrawWindow(
+                    _hwnd,
+                    NULL,
+                    NULL,
+                    RDW_INVALIDATE |
+                    RDW_ERASE |
+                    RDW_UPDATENOW |
+                    RDW_ALLCHILDREN
+                );
+            }
+
+            return 0;
+        }
         return super::WndProc(nmsg, wparam, lparam);
     }
     case WM_SETTINGCHANGE: {
@@ -1034,9 +1075,8 @@ LRESULT DesktopShellView::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
                 ListView_SetWorkAreas(_hwndListView, 1, &work_area);
                 break;
             case SPI_SETDESKWALLPAPER:
-                //I don't know why get this message twice
-                if (!UpdateWallpaper()) return 0;
-                LoadWallpaper(TRUE);
+                KillTimer(_hwnd, ID_TIMER_RELOAD_WALLPAPER);
+                SetTimer(_hwnd, ID_TIMER_RELOAD_WALLPAPER, 100, NULL);
                 break;
             }
         }

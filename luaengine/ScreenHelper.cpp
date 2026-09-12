@@ -8,8 +8,6 @@ extern int GetCurrentDPIScaling(int x);
 extern int GetRecommendedDPIScaling();
 extern void SetDpiScaling(int scale);
 
-extern int GetScreenBrightness();
-extern int SetScreenBrightness(int brightness);
 
 template <class T>
 string_t ConvertToString(T value) {
@@ -196,8 +194,6 @@ EXTERN_C {
                 v.iVal = GetRecommendedDPIScaling();
             } else if (v.str == TEXT("rdpi") || v.str == TEXT("recommendeddpi")) {
                 v.iVal = GetRecommendedDPIScaling();
-            } else if (v.str == TEXT("brightness")) {
-                v.iVal = GetScreenBrightness();
             }
             PUSH_INT(v);
         } else if (func == "screen::set") {
@@ -227,9 +223,6 @@ EXTERN_C {
                     // Set Recommended DPI Scaling
                     SetDpiScaling(-1);
                 }
-            } else if (v.str == TEXT("brightness")) {
-                v.iVal = (int)lua_tointeger(L, base + 3);
-                v.iVal = SetScreenBrightness(v.iVal);
             }
             PUSH_INT(v);
         }

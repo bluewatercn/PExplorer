@@ -37,6 +37,7 @@
 
 #define PM_SET_ICON_ALGORITHM   (WM_APP+0x19)
 #define PM_GET_ICON_ALGORITHM   (WM_APP+0x1A)
+#define ID_TIMER_RELOAD_WALLPAPER  816
 
 struct AM_DesktopShellWindow : public Window {
     typedef Window super;

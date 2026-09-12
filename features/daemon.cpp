@@ -11,8 +11,6 @@ extern ExplorerGlobals g_Globals;
 
 void update_property_handler();
 
-extern void CreateBrightnessLayer(HINSTANCE hInstance);
-
 #define WM_CLOCKAREA_EVENT (WM_USER + 100)
 #define HM_CLOCKAREA_CLICKED 1
 
@@ -384,15 +382,8 @@ int daemon_entry(int standalone)
     EnableShowDesktop(daemon, DISABLE_SHOWDESKTOP_TIMER);
     update_property_handler();
 
-    int brightness = JCFG2_DEF("JS_DAEMON", "screen_brightness", 100).ToInt();
     TCHAR buff[MAX_PATH + 1] = { 0 };
-    DWORD dw = GetEnvironmentVariable(TEXT("SCREEN_BRIGHTNESS"), buff, MAX_PATH);
-    if (buff[0] != '\0') {
-        brightness = _tstoi(buff);
-    }
-    if (brightness > 1) {
-        CreateBrightnessLayer(g_Globals._hInstance);
-    }
+
 
     if (standalone != 0) {
         Window::MessageLoop();
