@@ -507,14 +507,14 @@ LRESULT TaskBar::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
             {
                 HWND hwndRedraw = (HWND)lparam;
 
-                if (_map.find(hwndRedraw) != _map.end())
+                TaskBarMap::iterator it =
+                    _map.find(hwndRedraw);
+
+                if (it != _map.end())
                     UpdateWindow(hwndRedraw);
-                else
-                    AddWindow(hwndRedraw);
 
                 break;
             }
-
 
             case HSHELL_WINDOWACTIVATED:
             {
