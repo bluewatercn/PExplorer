@@ -41,6 +41,55 @@
 #include "../customization/startbutton.h"
 
 
+static HWINEVENTHOOK _hWinEventHook = NULL;
+static HWND _hwndDesktopBar = NULL;
+
+static void CALLBACK WinEventProc(
+    HWINEVENTHOOK hWinEventHook,
+    DWORD event,
+    HWND hwnd,
+    LONG idObject,
+    LONG idChild,
+    DWORD idEventThread,
+    DWORD dwmsEventTime)
+{
+    if (!_hwndDesktopBar)
+        return;
+
+    if (event == EVENT_SYSTEM_FOREGROUND) {
+
+        PostMessage(
+            _hwndDesktopBar,
+            WM_APP + 1,
+            0,
+            0
+        );
+
+        return;
+    }
+
+    if (event == EVENT_OBJECT_LOCATIONCHANGE) {
+
+        if (idObject != OBJID_WINDOW ||
+            idChild != CHILDID_SELF) {
+            return;
+        }
+
+        if (hwnd != GetForegroundWindow()) {
+            return;
+        }
+
+        PostMessage(
+            _hwndDesktopBar,
+            WM_APP + 1,
+            0,
+            0
+        );
+
+        return;
+    }
+}
+
 DesktopBar::DesktopBar(HWND hwnd)
     :  super(hwnd),
     _traySndVolIcon(hwnd, ID_TRAY_VOLUME),
@@ -53,6 +102,12 @@ DesktopBar::DesktopBar(HWND hwnd)
 
 DesktopBar::~DesktopBar()
 {
+    if (_hWinEventHook) {
+        UnhookWinEvent(_hWinEventHook);
+        _hWinEventHook = NULL;
+    }
+
+    _hwndDesktopBar = NULL;
     if (_hbmQuickLaunchBack) DeleteObject(_hbmQuickLaunchBack);
     RegisterHotkeys(TRUE);
     // restore work area to the previous size
@@ -217,7 +272,17 @@ LRESULT DesktopBar::Init(LPCREATESTRUCT pcs)
         _iQuickLaunchPadding = JCFG2_DEF("JS_QUICKLAUNCH", "padding", 4).ToInt();
     }
 
-    SetTimer(_hwnd, 0, 1000, NULL);
+    _hwndDesktopBar = _hwnd;
+
+    _hWinEventHook = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND,
+        EVENT_OBJECT_LOCATIONCHANGE,
+        NULL,
+        WinEventProc,
+        0,
+        0,
+        WINEVENT_OUTOFCONTEXT
+    );
 
     if (_hwndQuickLaunch && JCFG_TB(2, "userebar").ToBool() == TRUE) {
         JCFG_QL_SET(2, "maxiconsinrow") = 0;
@@ -235,9 +300,9 @@ LRESULT DesktopBar::Init(LPCREATESTRUCT pcs)
             rbBand.fMask |= RBBIM_COLORS | RBBIM_BACKGROUND;
             rbBand.clrBack = 0;
             HDC hdc = GetDC(_hwnd);
-            _hbmQuickLaunchBack = CreateSolidBitmap(hdc, 768, 16, TASKBAR_BKCOLOR());
+            //_hbmQuickLaunchBack = CreateSolidBitmap(hdc, 768, 16, TASKBAR_BKCOLOR());
             ReleaseDC(_hwnd, hdc);
-            rbBand.hbmBack = _hbmQuickLaunchBack;
+            //rbBand.hbmBack = _hbmQuickLaunchBack;
             //rbBand.hbmBack = LoadBitmap(g_Globals._hInstance, MAKEINTRESOURCE(IDB_TB_SH_DEF_16));
         }
         rbBand.cyChild = REBARBAND_HEIGHT - 5;
@@ -590,15 +655,14 @@ LRESULT DesktopBar::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
         SendMessage(_hwndNotify, PM_REFRESH_CONFIG, 0, 0);
         break;
 
-    case WM_TIMER:
-        if (wparam == 0) {
-            if (JCFG2_DEF("JS_TASKBAR", "hideforfullscreenwindow", true).ToBool() != FALSE) {
-                HideForFullScreenWindow(_hwnd);
-            }
-        } else if (wparam == ID_TRAY_VOLUME) {
-            OnTraySndVol(_hwnd, (UINT)wparam);
-        } else if (wparam == ID_TRAY_NETWORK) {
-            OnTrayNetwork(_hwnd, (UINT)wparam);
+    case WM_APP + 1:
+        if (JCFG2_DEF(
+            "JS_TASKBAR",
+            "hideforfullscreenwindow",
+            true
+        ).ToBool() != FALSE) {
+
+            HideForFullScreenWindow(_hwnd);
         }
         break;
 
