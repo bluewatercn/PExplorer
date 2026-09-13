@@ -65,7 +65,6 @@ extern void TaskbarTransparency(HWND hwnd,
 #define GCL_HICONSM GCLP_HICONSM
 #endif
 
-static HBRUSH hbrTaskLine = NULL;
 
 
 TaskBarEntry::TaskBarEntry()
@@ -95,7 +94,7 @@ RECT TaskBar::_icon_area = {
     1,
     0,
     TASKBAR_ICON_SIZE + 4,
-    DESKTOPBARBAR_HEIGHT - 4
+    DESKTOPBARBAR_HEIGHT - 7
 };
 
 
@@ -103,9 +102,6 @@ void TaskBar::InitTaskbarStyle()
 {
     _no_task_title = false;
     _task_close_button = false;
-
-    bool show_task_line = false;
-    COLORREF clrTaskLine = TASKBAR_TASKLINECOLOR();
 
     if (JCFG2_DEF("JS_TASKBAR", "no_task_title", false).ToBool() != FALSE) {
         _no_task_title = true;
@@ -119,13 +115,6 @@ void TaskBar::InitTaskbarStyle()
                       false).ToBool() != FALSE) {
             _task_close_button = true;
         }
-    }
-
-    if (clrTaskLine != MAXDWORD) {
-        show_task_line = true;
-
-        _icon_area.top = -1;
-        _icon_area.bottom -= 3;
     }
 }
 
@@ -213,10 +202,6 @@ LRESULT TaskBar::Init(LPCREATESTRUCT pcs)
     if (super::Init(pcs))
         return 1;
 
-    COLORREF clrTaskLine = TASKBAR_TASKLINECOLOR();
-
-    if (clrTaskLine != MAXDWORD)
-        hbrTaskLine = CreateSolidBrush(clrTaskLine);
 
     DWORD ws =
         WS_CHILD |
@@ -762,70 +747,6 @@ int TaskBar::Notify(int id, NMHDR *pnmh)
 
             case CDDS_ITEMPOSTPAINT:
             {
-                if (hbrTaskLine) {
-
-                    RECT rect =
-                        lptbcd->nmcd.rc;
-
-                    rect.top =
-                        DESKTOPBARBAR_HEIGHT - 4;
-
-                    rect.bottom =
-                        rect.top + 2;
-
-                    if (((lptbcd->nmcd.uItemState &
-                          CDIS_CHECKED) != CDIS_CHECKED) &&
-                        ((lptbcd->nmcd.uItemState &
-                          CDIS_HOT) != CDIS_HOT)) {
-
-                        rect.left += 4;
-                        rect.right -= 4;
-
-                    }
-                    else {
-
-                        if (_task_close_button) {
-                            rect.left -= 2;
-                            rect.right += 2;
-                        }
-                    }
-
-                    if (g_Globals._isDebug) {
-
-                        _log_(
-                            FmtString(
-                                TEXT(
-                                    "TaskBar::Notify("
-                                    "NM_CUSTOMDRAW) %d"
-                                ),
-                                lptbcd->nmcd.uItemState
-                            )
-                        );
-                    }
-
-                    if (lptbcd->nmcd.uItemState == 0 &&
-                        _thumbnail) {
-
-                        KillTimer(
-                            _hwnd,
-                            ID_TIMER_DESTORYTHUMBNAIL
-                        );
-
-                        SetTimer(
-                            _hwnd,
-                            ID_TIMER_DESTORYTHUMBNAIL,
-                            500,
-                            NULL
-                        );
-                    }
-
-                    FillRect(
-                        lptbcd->nmcd.hdc,
-                        &rect,
-                        hbrTaskLine
-                    );
-                }
-
                 return CDRF_DODEFAULT;
             }
 
