@@ -68,14 +68,6 @@ QuickLaunchBar::QuickLaunchBar(HWND hwnd)
     _btn_width = JCFG2_DEF("JS_QUICKLAUNCH", "button_width", DESKTOPBARBAR_HEIGHT).ToInt();
     _icon_area = { 0, -2, _btn_width, DESKTOPBARBAR_HEIGHT };
 
-    String msstyle_button = JCFG2_DEF("JS_QUICKLAUNCH", "msstyle_button", TEXT("Taskbar")).ToString();
-    if (msstyle_button != TEXT("")) {
-        SetWindowTheme(hwnd, msstyle_button, L"Toolbar"); //TaskBar
-        if (msstyle_button == TEXT("BB")) {
-            _icon_area.top = -4;
-        }
-    }
-
     HWND hwndToolTip = (HWND) SendMessage(hwnd, TB_GETTOOLTIPS, 0, 0);
 
     SetWindowStyle(hwndToolTip, GetWindowStyle(hwndToolTip) | TTS_ALWAYSTIP);

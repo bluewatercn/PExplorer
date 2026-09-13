@@ -127,29 +127,6 @@ void TaskBar::InitTaskbarStyle()
         _icon_area.top = -1;
         _icon_area.bottom -= 3;
     }
-
-    String msstyle_taskbutton =
-        JCFG2_DEF("JS_TASKBAR",
-                  "msstyle_taskbutton",
-                  TEXT("auto")).ToString();
-
-    if (msstyle_taskbutton == TEXT("auto")) {
-        if (_task_close_button) {
-            msstyle_taskbutton = TEXT("BB");
-        }
-        else if (TASKBAR_THEMESTYLE().compare(TEXT("light")) == 0) {
-            msstyle_taskbutton = TEXT("BB");
-        }
-        else {
-            msstyle_taskbutton = TEXT("DarkMode");
-            JCFG_QL_SET(2, "hide_fixedsep") = true;
-        }
-    }
-
-    if (msstyle_taskbutton != TEXT("")) {
-        JCFG_TB_SET(2, "msstyle_taskbutton") = msstyle_taskbutton;
-        JCFG_QL_SET(2, "msstyle_button") = msstyle_taskbutton;
-    }
 }
 
 
@@ -306,19 +283,6 @@ LRESULT TaskBar::Init(LPCREATESTRUCT pcs)
         0,
         MAKELPARAM(_icon_area.right, _icon_area.bottom)
     );
-
-    String msstyle_taskbutton =
-        JCFG2_DEF("JS_TASKBAR",
-                  "msstyle_taskbutton",
-                  TEXT("")).ToString();
-
-    if (msstyle_taskbutton != TEXT("")) {
-        SetWindowTheme(
-            _htoolbar,
-            msstyle_taskbutton,
-            L"Toolbar"
-        );
-    }
 
     HWND hwndToolTip =
     
