@@ -883,8 +883,9 @@ void TaskBar::ActivateApp(
             );
     }
 
-    SetForegroundWindow(hwnd);
-
+    if (!minimize_it) {
+        SetForegroundWindow(hwnd);
+    }
     if (minimize_it) {
 
         PostMessage(
