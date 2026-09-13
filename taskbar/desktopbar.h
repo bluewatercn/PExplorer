@@ -111,8 +111,6 @@ protected:
 
     HBITMAP _hbmQuickLaunchBack;
     int     _iQuickLaunchPadding;
-    TrayIcon    _traySndVolIcon;
-    TrayIcon    _trayNetworkIcon;
     void    AddTrayIcons();
     virtual void TrayClick(UINT id, int btn);
     virtual void TrayDblClick(UINT id, int btn);

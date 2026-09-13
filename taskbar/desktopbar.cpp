@@ -91,9 +91,7 @@ static void CALLBACK WinEventProc(
 }
 
 DesktopBar::DesktopBar(HWND hwnd)
-    :  super(hwnd),
-    _traySndVolIcon(hwnd, ID_TRAY_VOLUME),
-    _trayNetworkIcon(hwnd, ID_TRAY_NETWORK)
+    :  super(hwnd)
 {
     SetWindowIcon(hwnd, IDI_WINXSHELL);
 
@@ -533,20 +531,6 @@ static void HideForFullScreenWindow(HWND hwnd)
     }
 }
 
-static void OnTraySndVol(HWND hwnd, UINT id)
-{
-    if (hwnd) KillTimer(hwnd, id); // finish one-click timer
-    //launch volume control in rightbottom(x:4096, y:4096)
-    launch_file(hwnd, TEXT("SndVol.exe"), SW_SHOWNORMAL, TEXT("-m 268439552"));
-}
-
-static void OnTrayNetwork(HWND hwnd, UINT id)
-{
-    if (hwnd) KillTimer(hwnd, id);
-    LPCTSTR selfexe = JVAR("JVAR_MODULEFILENAME").ToString().c_str();
-    launch_file(hwnd, selfexe, SW_SHOWNORMAL, _T("-ui -jcfg UI_WIFI\\main.jcfg"));
-}
-
 static void NotifySetWorkArea(HWND hwnd) {
     WindowRect rect(hwnd);
     RECT work_area = { 0, 0, GetSystemMetrics(SM_CXSCREEN), rect.top };
@@ -857,10 +841,6 @@ int DesktopBar::Command(int id, int code)
         DestroyWindow(g_Globals._hwndDesktop);
         break;
     }
-    case ID_TRAY_VOLUME:
-        OnTraySndVol(NULL, 0);
-        break;
-
     case ID_VOLUME_PROPERTIES:
         launch_cpanel(_hwnd, TEXT("mmsys.cpl"));
         break;
@@ -1072,46 +1052,13 @@ void DesktopBar::ControlResize(WPARAM wparam, LPARAM lparam)
 
 void DesktopBar::AddTrayIcons()
 {
-    HICON icon = NULL;
-    if (JCFG2_DEF("JS_TRAYNOTIFY", "soundicon", false).ToBool() != FALSE) {
-        icon = g_Globals._icon_cache.get_icon(ICID_TRAY_SND_NONE).get_hicon();
-        _traySndVolIcon.Add(icon, ResString(IDS_VOLUME));
-    }
-    if (JCFG2_DEF("JS_TRAYNOTIFY", "networkicon", false).ToBool() != FALSE) {
-        icon = g_Globals._icon_cache.get_icon(ICID_TRAY_NET_WIRED_LAN).get_hicon();
-        _trayNetworkIcon.Add(icon, ResString(IDS_NETWORK));
-    }
 }
 
 void DesktopBar::TrayClick(UINT id, int btn)
 {
-    switch (id) {
-    case ID_TRAY_VOLUME:
-        if (btn == TRAYBUTTON_LEFT) {
-            SetTimer(_hwnd, ID_TRAY_VOLUME, 500, NULL); // wait a bit to correctly handle double clicks
-        } else {
-            PopupMenu menu(IDM_VOLUME);
-            SetMenuDefaultItem(menu, 0, MF_BYPOSITION);
-            menu.TrackPopupMenuAtPos(_hwnd, GetMessagePos());
-        }
-        break;
-    case ID_TRAY_NETWORK:
-        if (btn == TRAYBUTTON_LEFT) {
-            SetTimer(_hwnd, ID_TRAY_NETWORK, 500, NULL); // wait a bit to correctly handle double clicks
-        }
-        break;
-    }
 }
 
 void DesktopBar::TrayDblClick(UINT id, int btn)
 {
-    switch (id) {
-    case ID_TRAY_VOLUME:
-        OnTraySndVol(_hwnd, id);
-        break;
-    case ID_TRAY_NETWORK:
-        OnTrayNetwork(_hwnd, id);
-        break;
-    }
 }
 
