@@ -24,6 +24,7 @@ int g_JCfg_taskbar_startmenu_iconsize = 24;
 int g_JCfg_DPI_SX = 96;
 int g_JCfg_DPI_SY = 96;
 HBRUSH g_JCfg_taskbar_bkbrush = NULL;
+HBRUSH g_JCfg_taskbar_linebrush = NULL;
 COLORREF g_JCfg_taskbar_textcolor = 0;
 string_t g_JCfg_taskbar_themestyle = TEXT("dark");
 
@@ -183,6 +184,7 @@ static void
 JCfg_init() {
     /* init taskbar background brush */
     g_JCfg_taskbar_bkbrush = CreateSolidBrush(TASKBAR_BKCOLOR());
+    g_JCfg_taskbar_linebrush = CreateSolidBrush(TASKBAR_TASKLINECOLOR());
     g_JCfg_taskbar_textcolor = TASKBAR_GETTEXTCOLOR();
     g_JCfg_taskbar_themestyle = TASKBAR_GETTHEMESTYLE();
     JCfg_GetDesktopBarUseSmallIcon();

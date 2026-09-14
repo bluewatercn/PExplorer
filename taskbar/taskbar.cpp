@@ -747,6 +747,24 @@ int TaskBar::Notify(int id, NMHDR *pnmh)
 
             case CDDS_ITEMPOSTPAINT:
             {
+                TaskBarMap::iterator it =
+                    _map.find_id(
+                        (int)lptbcd->nmcd.dwItemSpec
+                    );
+
+                if (it != _map.end() &&
+                    it->first == GetForegroundWindow()) {
+
+                    RECT rc = lptbcd->nmcd.rc;
+                    rc.top = rc.bottom - 3;
+
+                    FillRect(
+                        lptbcd->nmcd.hdc,
+                        &rc,
+                        g_JCfg_taskbar_linebrush
+                    );
+                }
+
                 return CDRF_DODEFAULT;
             }
 

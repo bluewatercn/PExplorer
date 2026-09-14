@@ -15,6 +15,7 @@ extern int g_JCfg_DPI_SX;
 extern int g_JCfg_DPI_SY;
 
 extern HBRUSH g_JCfg_taskbar_bkbrush;
+extern HBRUSH g_JCfg_taskbar_linebrush;
 extern COLORREF g_JCfg_taskbar_textcolor;
 extern string_t g_JCfg_taskbar_themestyle;
 
