@@ -68,6 +68,7 @@ StartMenu::StartMenu(HWND hwnd, int icon_size)
     _last_pos = WindowRect(hwnd).pos();
 #ifdef _LIGHT_STARTMENU
     _selected_id = -1;
+    _selected_index = -1;
     _last_mouse_pos = 0;
 #endif
 
@@ -99,6 +100,7 @@ StartMenu::StartMenu(HWND hwnd, const StartMenuCreateInfo &create_info, int icon
     _last_pos = WindowRect(hwnd).pos();
 #ifdef _LIGHT_STARTMENU
     _selected_id = -1;
+    _selected_index = -1;
     _last_mouse_pos = 0;
 #endif
 
@@ -559,25 +561,14 @@ int StartMenu::ButtonHitTest(POINT pt)
 
 void StartMenu::InvalidateSelection()
 {
-    if (_selected_id <= 0)
+    if (_selected_index < 0 || _selected_index >= (int)_buttons.size())
         return;
 
-    ClientRect clnt(_hwnd);
-    const int icon_size = _icon_size;
-    RECT rect = {_border_left, _border_top, clnt.right, STARTMENU_LINE_HEIGHT(icon_size)};
+    RECT rect;
+    GetButtonRectByIndex(_selected_index, &rect);
 
-    for (SMBtnVector::const_iterator it = _buttons.begin() + _scroll_pos; it != _buttons.end(); ++it) {
-        const SMBtnInfo &info = *it;
-
-        rect.bottom = rect.top + (info._id == -1 ? STARTMENU_SEP_HEIGHT(icon_size) : STARTMENU_LINE_HEIGHT(icon_size));
-
-        if (info._id == _selected_id) {
-            InvalidateRect(_hwnd, &rect, TRUE);
-            break;
-        }
-
-        rect.top = rect.bottom;
-    }
+    if (!IsRectEmpty(&rect))
+        InvalidateRect(_hwnd, &rect, TRUE);
 }
 
 const SMBtnInfo *StartMenu::GetButtonInfo(int id) const
@@ -597,71 +588,78 @@ bool StartMenu::SelectButton(int id, bool open_sub)
     if (id == _selected_id)
         return true;
 
+    for (int i = 0; i < (int)_buttons.size(); ++i) {
+        if (_buttons[i]._id == id)
+            return SelectButtonIndex(i, open_sub);
+    }
+
     InvalidateSelection();
 
-    const SMBtnInfo *btn = GetButtonInfo(id);
+    _selected_id = -1;
+    _selected_index = -1;
 
-    if (btn && btn->_enabled) {
-        _selected_id = id;
-
-        InvalidateSelection();
-
-        // automatically open submenus
-        if (btn->_hasSubmenu) {
-            if (open_sub)
-                OpenSubmenu();
-        } else
-            CloseOtherSubmenus();   // close any open submenu
-
-        return true;
-    } else {
-        _selected_id = -1;
-        return false;
-    }
+    return false;
 }
 
 bool StartMenu::OpenSubmenu(bool select_first)
 {
-    if (_selected_id == -1)
+    if (_selected_index < 0 ||
+        _selected_index >= (int)_buttons.size())
         return false;
 
     InvalidateSelection();
 
-    const SMBtnInfo *btn = GetButtonInfo(_selected_id);
+    const SMBtnInfo& btn = _buttons[_selected_index];
 
     // automatically open submenus
-    if (btn->_hasSubmenu) {
+    if (btn._hasSubmenu) {
         //@@ allows destroying of startmenu when processing PM_UPDATE_ICONS -> GPF
-        UpdateWindow(_hwnd);    // draw focused button before waiting on submenu creation
-        Command(_selected_id, BN_CLICKED);
+        UpdateWindow(_hwnd); // draw focused button before waiting on submenu creation
+
+        Command(btn._id, BN_CLICKED);
 
         if (select_first && _submenu)
             SendMessage(_submenu, PM_SELECT_ENTRY, (WPARAM)false, 0);
 
         return true;
-    } else
-        return false;
+    }
+
+    return false;
 }
 
-
-int StartMenu::GetSelectionIndex()
-{
-    if (_selected_id == -1)
-        return -1;
-
-    for (int i = 0; i < (int)_buttons.size(); ++i)
-        if (_buttons[i]._id == _selected_id)
-            return i;
-
-    return -1;
-}
 
 bool StartMenu::SelectButtonIndex(int idx, bool open_sub)
 {
-    if (idx >= 0 && idx < (int)_buttons.size())
-        return SelectButton(_buttons[idx]._id, open_sub);
-    else
+    if (idx < 0 || idx >= (int)_buttons.size())
         return false;
+
+    if (idx == _selected_index)
+        return true;
+
+    InvalidateSelection();
+
+    SMBtnInfo& btn = _buttons[idx];
+
+    if (!btn._enabled) {
+        _selected_id = -1;
+        _selected_index = -1;
+        return false;
+    }
+
+    _selected_index = idx;
+    _selected_id = btn._id;
+
+    InvalidateSelection();
+
+    if (btn._hasSubmenu) {
+        if (open_sub)
+            OpenSubmenu();
+    }
+    else {
+        CloseOtherSubmenus();
+    }
+
+    return true;
 }
 
 void StartMenu::ProcessKey(int vk)
@@ -711,7 +709,7 @@ void StartMenu::ProcessKey(int vk)
 
 bool StartMenu::Navigate(int step)
 {
-    int idx = GetSelectionIndex();
+    int idx = _selected_index;
 
     if (idx == -1) {
         if (step > 0)
@@ -723,7 +721,7 @@ bool StartMenu::Navigate(int step)
     for (;;) {
         idx += step;
 
-        if (_buttons.size() <= 1 && (idx < 0 || idx > (int)_buttons.size()))
+        if (_buttons.size() <= 1 && (idx < 0 || idx >(int)_buttons.size()))
             break;
 
         if (idx < 0)
@@ -741,7 +739,7 @@ bool StartMenu::Navigate(int step)
 
 bool StartMenu::JumpToNextShortcut(TCHAR c)
 {
-    int cur_idx = GetSelectionIndex();
+    int cur_idx = _selected_index;
 
     if (cur_idx == -1)
         cur_idx = 0;
@@ -829,6 +827,39 @@ int StartMenu::GetButtonRect(int id, PRECT prect) const
 #endif
 }
 
+void StartMenu::GetButtonRectByIndex(int index, RECT* rect) const
+{
+    if (!rect)
+        return;
+
+    SetRectEmpty(rect);
+
+    if (index < _scroll_pos || index >= (int)_buttons.size())
+        return;
+
+    ClientRect clnt(_hwnd);
+    const int icon_size = _icon_size;
+
+    rect->left = _border_left;
+    rect->right = clnt.right;
+    rect->top = _border_top;
+
+    for (int i = _scroll_pos; i < index; ++i) {
+        const SMBtnInfo& info = _buttons[i];
+
+        rect->top +=
+            (info._id == -1
+                ? STARTMENU_SEP_HEIGHT(icon_size)
+                : STARTMENU_LINE_HEIGHT(icon_size));
+    }
+
+    const SMBtnInfo& info = _buttons[index];
+
+    rect->bottom = rect->top +
+        (info._id == -1
+            ? STARTMENU_SEP_HEIGHT(icon_size)
+            : STARTMENU_LINE_HEIGHT(icon_size));
+}
 
 void StartMenu::DrawFloatingButton(HDC hdc)
 {
@@ -1257,7 +1288,11 @@ bool StartMenu::CreateSubmenu(int id, int folder_id, LPCTSTR title, CREATORFUNC_
     } catch (COMException &) {
         // ignore Exception and don't display anything
         CloseOtherSubmenus(id);
-        _buttons[GetSelectionIndex()]._enabled = false; // disable entries for non-existing folders
+
+        if (_selected_index >= 0 &&
+            _selected_index < (int)_buttons.size())
+            _buttons[_selected_index]._enabled = false;
+
         return false;
     }
 }
@@ -1281,7 +1316,11 @@ bool StartMenu::CreateSubmenu(int id, int folder_id1, int folder_id2, LPCTSTR ti
         return true;
     } else {
         CloseOtherSubmenus(id);
-        _buttons[GetSelectionIndex()]._enabled = false; // disable entries for non-existing folders
+
+        if (_selected_index >= 0 &&
+            _selected_index < (int)_buttons.size())
+            _buttons[_selected_index]._enabled = false;
+
         return false;
     }
 }
@@ -1655,6 +1694,7 @@ void StartMenuRoot::TrackStartmenu()
 
 #ifdef _LIGHT_STARTMENU
     _selected_id = -1;
+    _selected_index = -1;
 #endif
 
 #ifdef _LIGHT_STARTMENU

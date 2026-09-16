@@ -248,15 +248,17 @@ protected:
 #ifdef _LIGHT_STARTMENU
     SMBtnVector _buttons;
     int     _selected_id;
+    int     _selected_index;
     LPARAM  _last_mouse_pos;
 
     void    ResizeToButtons();
     int     ButtonHitTest(POINT pt);
     void    InvalidateSelection();
+    void  GetButtonRectByIndex(int index, RECT* rect) const;
     const SMBtnInfo *GetButtonInfo(int id) const;
     bool    SelectButton(int id, bool open_sub = true);
     bool    SelectButtonIndex(int idx, bool open_sub = true);
-    int     GetSelectionIndex();
+
     virtual void ProcessKey(int vk);
     bool    Navigate(int step);
     bool    OpenSubmenu(bool select_first = false);
