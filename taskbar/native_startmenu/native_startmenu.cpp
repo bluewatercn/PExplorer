@@ -2248,7 +2248,7 @@ void NativeStartMenu::MeasureMenuItem(
         }
         return;
     }
-
+    
     SIZE size = {};
 
     GetTextExtentPoint32W(
@@ -2262,36 +2262,81 @@ void NativeStartMenu::MeasureMenuItem(
         hdc);
 
     /*
-     * 左边：
-     * 8  像素边距
+     * 外层菜单：
+     *
+     * 8  左边距
      * 20 图标
      * 8  图标与文字间距
+     * 12 右边距
      */
-    int width =
-        8 + 20 + 8;
-
-    /*
-     * 文字实际宽度
-     */
-    width +=
-        size.cx;
-
-    /*
-     * 右边留一点空间
-     */
-    width += 12;
-
-    /*
-     * 有子菜单的话，
-     * 给右侧箭头留空间。
-     */
-    if (data->hasSubMenu)
+    if (!data->smallIcon)
     {
-        width += 16;
-    }
+        int width =
+            8 + 20 + 8;
 
-    mis->itemWidth =
-        width;
+        width +=
+            size.cx;
+
+        width +=
+            12;
+
+        if (data->hasSubMenu)
+        {
+            width +=
+                16;
+        }
+
+        mis->itemWidth =
+            width;
+    }
+    else
+    {
+        /*
+         * 内层菜单：
+         *
+         * WinME 风格更紧凑。
+         *
+         * 8  左边距
+         * 16 小图标
+         * 8  图标与文字间距
+         * 8  右边距
+         */
+        int width =
+            8 + 16 + 8;
+
+        /*
+         * DrawMenuItem() 中内层字体
+         * 是当前字体的 90%。
+         *
+         * 这里也按 90% 计算文字宽度，
+         * 避免“实际文字变小了，
+         * 菜单宽度却仍按大字体计算”。
+         */
+        size.cx =
+            MulDiv(
+                size.cx,
+                90,
+                100);
+
+        width +=
+            size.cx;
+
+        width +=
+            8;
+
+        /*
+         * 内层有子菜单时，
+         * 给箭头留较小空间。
+         */
+        if (data->hasSubMenu)
+        {
+            width +=
+                12;
+        }
+
+        mis->itemWidth =
+            width;
+    }
 
     if (data->smallIcon)
     {
