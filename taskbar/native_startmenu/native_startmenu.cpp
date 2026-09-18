@@ -2139,15 +2139,75 @@ void NativeStartMenu::MeasureMenuItem(
     if (!mis)
         return;
 
+    NativeMenuItemData* data =
+        (NativeMenuItemData*)mis->itemData;
+
+    if (!data || !data->text)
+    {
+        mis->itemWidth = 0;
+        mis->itemHeight =
+            NATIVE_STARTMENU_ITEM_HEIGHT;
+        return;
+    }
+
+    HDC hdc =
+        GetDC(NULL);
+
+    if (!hdc)
+    {
+        mis->itemWidth = 0;
+        mis->itemHeight =
+            NATIVE_STARTMENU_ITEM_HEIGHT;
+        return;
+    }
+
+    SIZE size = {};
+
+    GetTextExtentPoint32W(
+        hdc,
+        data->text,
+        lstrlenW(data->text),
+        &size);
+
+    ReleaseDC(
+        NULL,
+        hdc);
+
+    /*
+     * 左边：
+     * 8  像素边距
+     * 20 图标
+     * 8  图标与文字间距
+     */
+    int width =
+        8 + 20 + 8;
+
+    /*
+     * 文字实际宽度
+     */
+    width +=
+        size.cx;
+
+    /*
+     * 右边留一点空间
+     */
+    width += 12;
+
+    /*
+     * 有子菜单的话，
+     * 给右侧箭头留空间。
+     */
+    if (data->hasSubMenu)
+    {
+        width += 16;
+    }
 
     mis->itemWidth =
-        NATIVE_STARTMENU_WIDTH;
-
+        width;
 
     mis->itemHeight =
         NATIVE_STARTMENU_ITEM_HEIGHT;
 }
-
 
 // ============================================================
 // FreeMenuItemData

@@ -5,7 +5,7 @@
 #include <shlobj.h>
 #include <vector>
 
-#define NATIVE_STARTMENU_WIDTH          220
+#define NATIVE_STARTMENU_WIDTH          160
 #define NATIVE_STARTMENU_ITEM_HEIGHT    32
 #define NATIVE_STARTMENU_MARGIN         4
 
@@ -36,6 +36,8 @@ struct NativeMenuItemData
     bool hasSubMenu;
 
     bool ownerDraw;
+
+    bool smallIcon;
 };
 
 
