@@ -2076,14 +2076,15 @@ void NativeStartMenu::DrawMenuItem(
 
 
     /*
-     * 文字
-     */
+    * 文字
+    */
     RECT textRect =
         rc;
 
-
-    textRect.left += 36;
-
+    textRect.left +=
+        data->smallIcon
+        ? 32
+        : 36;
 
     if (data->hasSubMenu)
     {
@@ -2094,16 +2095,70 @@ void NativeStartMenu::DrawMenuItem(
         textRect.right -= 8;
     }
 
-
     SetBkMode(
         hdc,
         TRANSPARENT);
-
 
     SetTextColor(
         hdc,
         textColor);
 
+    /*
+     * 内层菜单使用稍小的字体。
+     *
+     * 外层：
+     * 使用系统当前菜单字体。
+     *
+     * 内层：
+     * 在当前字体基础上缩小。
+     */
+    HFONT oldFont =
+        (HFONT)GetCurrentObject(
+            hdc,
+            OBJ_FONT);
+
+    HFONT smallFont =
+        NULL;
+
+    if (data->smallIcon &&
+        oldFont)
+    {
+        LOGFONTW lf = {};
+
+        if (GetObjectW(
+            oldFont,
+            sizeof(lf),
+            &lf))
+        {
+            if (lf.lfHeight > 0)
+            {
+                lf.lfHeight =
+                    -MulDiv(
+                        lf.lfHeight,
+                        90,
+                        100);
+            }
+            else
+            {
+                lf.lfHeight =
+                    MulDiv(
+                        lf.lfHeight,
+                        90,
+                        100);
+            }
+
+            smallFont =
+                CreateFontIndirectW(
+                    &lf);
+
+            if (smallFont)
+            {
+                SelectObject(
+                    hdc,
+                    smallFont);
+            }
+        }
+    }
 
     DrawTextW(
         hdc,
@@ -2114,6 +2169,19 @@ void NativeStartMenu::DrawMenuItem(
         DT_VCENTER |
         DT_LEFT |
         DT_NOPREFIX);
+
+    /*
+     * 恢复原来的字体。
+     */
+    if (smallFont)
+    {
+        SelectObject(
+            hdc,
+            oldFont);
+
+        DeleteObject(
+            smallFont);
+    }
 
 
     /*
