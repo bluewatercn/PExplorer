@@ -1115,7 +1115,7 @@ void NativeStartMenu::AddProgramsItem(
 
 
     data->ownerDraw =
-        false;
+        true;
 
 
     MENUITEMINFOW mii = {};
@@ -1128,8 +1128,11 @@ void NativeStartMenu::AddProgramsItem(
     mii.fMask =
         MIIM_ID |
         MIIM_STRING |
-        MIIM_DATA;
+        MIIM_DATA |
+        MIIM_FTYPE;
 
+    mii.fType =
+        MFT_OWNERDRAW;
 
     /*
      * 给程序一个稳定 ID。
@@ -1215,7 +1218,7 @@ void NativeStartMenu::InsertProgramSubMenu(
 
 
     data->ownerDraw =
-        false;
+        true;
 
 
     MENUITEMINFOW mii = {};
@@ -1228,8 +1231,11 @@ void NativeStartMenu::InsertProgramSubMenu(
     mii.fMask =
         MIIM_STRING |
         MIIM_SUBMENU |
-        MIIM_DATA;
+        MIIM_DATA |
+        MIIM_FTYPE;
 
+    mii.fType =
+        MFT_OWNERDRAW;
 
     mii.dwTypeData =
         (LPWSTR)data->text;
@@ -1305,7 +1311,7 @@ void NativeStartMenu::InsertSubMenu(
 
 
     data->ownerDraw =
-        false;
+        true;
 
 
     MENUITEMINFOW mii = {};
@@ -1319,8 +1325,11 @@ void NativeStartMenu::InsertSubMenu(
         MIIM_ID |
         MIIM_STRING |
         MIIM_SUBMENU |
-        MIIM_DATA;
+        MIIM_DATA |
+        MIIM_FTYPE;
 
+    mii.fType =
+        MFT_OWNERDRAW;
 
     mii.wID =
         command;
@@ -1395,7 +1404,7 @@ void NativeStartMenu::InsertCommand(
 
 
     data->ownerDraw =
-        false;
+        true;
 
 
     MENUITEMINFOW mii = {};
@@ -1408,8 +1417,11 @@ void NativeStartMenu::InsertCommand(
     mii.fMask =
         MIIM_ID |
         MIIM_STRING |
-        MIIM_DATA;
+        MIIM_DATA |
+        MIIM_FTYPE;
 
+    mii.fType =
+        MFT_OWNERDRAW;
 
     mii.wID =
         command;
@@ -1504,7 +1516,7 @@ void NativeStartMenu::InsertShellFolder(
 
 
     data->ownerDraw =
-        false;
+        true;
 
 
     MENUITEMINFOW mii = {};
@@ -1517,8 +1529,11 @@ void NativeStartMenu::InsertShellFolder(
     mii.fMask =
         MIIM_ID |
         MIIM_STRING |
-        MIIM_DATA;
+        MIIM_DATA |
+        MIIM_FTYPE;
 
+    mii.fType =
+        MFT_OWNERDRAW;
 
     /*
      * Shell folder使用固定 ID范围。
