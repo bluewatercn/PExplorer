@@ -422,8 +422,20 @@ void NativeStartMenu::BuildMainMenu(
 
 
     /*
-     * Programs
+     * 分隔线
      */
+    /*
+    InsertMenuW(
+        hMenu,
+        -1,
+        MF_BYPOSITION |
+        MF_SEPARATOR,
+        0,
+        NULL);
+     */
+    /*
+ * Programs
+ */
     HMENU hPrograms =
         CreatePopupMenu();
 
@@ -434,7 +446,7 @@ void NativeStartMenu::BuildMainMenu(
 
 
         if (GetMenuItemCount(
-                hPrograms) > 0)
+            hPrograms) > 0)
         {
             InsertSubMenu(
                 hMenu,
@@ -462,42 +474,12 @@ void NativeStartMenu::BuildMainMenu(
 
 
     /*
-     * Pictures
-     */
-    InsertShellFolder(
-        hMenu,
-        CSIDL_MYPICTURES,
-        L"Pictures");
-
-
-    /*
-     * Computer
-     */
-    InsertShellFolder(
-        hMenu,
-        CSIDL_DRIVES,
-        L"Computer");
-
-
-    /*
      * Network
      */
-    InsertShellFolder(
-        hMenu,
-        CSIDL_NETWORK,
-        L"Network");
-
-
-    /*
-     * 分隔线
-     */
-    InsertMenuW(
-        hMenu,
-        -1,
-        MF_BYPOSITION |
-        MF_SEPARATOR,
-        0,
-        NULL);
+        InsertShellFolder(
+            hMenu,
+            CSIDL_NETWORK,
+            L"Network");
 
 
     /*
@@ -518,12 +500,6 @@ void NativeStartMenu::BuildMainMenu(
             hSettings,
             CSIDL_PRINTERS,
             L"Printers");
-
-
-        InsertShellFolder(
-            hSettings,
-            CSIDL_NETWORK,
-            L"Network");
 
 
         /*
@@ -583,15 +559,6 @@ void NativeStartMenu::BuildMainMenu(
                 hSettings);
         }
     }
-
-
-    /*
-     * Search
-     */
-    InsertCommand(
-        hMenu,
-        NATIVE_CMD_SEARCH,
-        L"Search...");
 
 
     /*
