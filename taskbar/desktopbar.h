@@ -26,6 +26,7 @@
 //
 
 #include "../customization/startbutton.h"
+#include "native_startmenu/native_startmenu.h"
 
 #define CLASSNAME_EXPLORERBAR   TEXT("Shell_TrayWnd")
 #define TITLE_EXPLORERBAR       TEXT("")    // use an empty window title, so windows taskmanager does not show the window in its application list
@@ -80,6 +81,8 @@ struct DesktopBar : public
 
     DesktopBar(HWND hwnd);
     ~DesktopBar();
+
+    NativeStartMenu* _nativeStartMenu;
 
     static HWND Create();
 

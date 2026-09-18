@@ -91,8 +91,10 @@ static void CALLBACK WinEventProc(
 }
 
 DesktopBar::DesktopBar(HWND hwnd)
-    :  super(hwnd)
+    :  super(hwnd),
+    _nativeStartMenu(NULL)
 {
+   
     SetWindowIcon(hwnd, IDI_WINXSHELL);
 
     SystemParametersInfo(SPI_GETWORKAREA, 0, &_work_area_org, 0);
@@ -100,6 +102,11 @@ DesktopBar::DesktopBar(HWND hwnd)
 
 DesktopBar::~DesktopBar()
 {
+    if (_nativeStartMenu)
+    {
+        delete _nativeStartMenu;
+        _nativeStartMenu = NULL;
+    }
     if (_hWinEventHook) {
         UnhookWinEvent(_hWinEventHook);
         _hWinEventHook = NULL;
@@ -338,6 +345,19 @@ LRESULT DesktopBar::Init(LPCREATESTRUCT pcs)
     // prepare Startmenu, but hide it for now
     _startMenuRoot = GET_WINDOW(StartMenuRoot, StartMenuRoot::Create(_hwndStartButton, STARTMENUROOT_ICON_SIZE));
     _startMenuRoot->_hwndStartButton = _hwndStartButton;
+
+    _nativeStartMenu = new NativeStartMenu(
+        _hwnd,
+        _hwndStartButton);
+
+    if (_nativeStartMenu)
+    {
+        if (!_nativeStartMenu->Create(_hwnd))
+        {
+            delete _nativeStartMenu;
+            _nativeStartMenu = NULL;
+        }
+    }
 
     return 0;
 }
@@ -797,7 +817,11 @@ int DesktopBar::Command(int id, int code)
         _startMenuRoot->Command(IDC_LAUNCH, 0);
         break;
     case IDC_START: {
-        ShowOrHideStartMenu(_startAction);
+        //ShowOrHideStartMenu(_startAction);
+        if (_nativeStartMenu)
+        {
+            _nativeStartMenu->Toggle();
+        }
         break;
     }
     case ID_ABOUT_EXPLORER:

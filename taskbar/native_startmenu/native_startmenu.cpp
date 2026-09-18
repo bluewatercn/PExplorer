@@ -1,0 +1,2321 @@
+#include "precomp.h"
+#include "native_startmenu.h"
+
+#include <windows.h>
+#include <windowsx.h>
+#include <shellapi.h>
+#include <shlobj.h>
+#include <shlwapi.h>
+#include <strsafe.h>
+
+#include <vector>
+#include <algorithm>
+#include <cstdlib>
+
+#pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "shlwapi.lib")
+
+
+// ============================================================
+// NativeStartMenu
+// ============================================================
+
+NativeStartMenu::NativeStartMenu(
+    HWND hwndOwner,
+    HWND hwndStartButton)
+    :
+    _hwndOwner(hwndOwner),
+    _hwndStartButton(hwndStartButton),
+    _hwndMenu(NULL),
+    _visible(false),
+    _hMenu(NULL)
+{
+}
+
+
+NativeStartMenu::~NativeStartMenu()
+{
+    Hide();
+
+    if (_hMenu)
+    {
+        DestroyMenu(_hMenu);
+        _hMenu = NULL;
+    }
+
+    if (_hwndMenu)
+    {
+        DestroyWindow(_hwndMenu);
+        _hwndMenu = NULL;
+    }
+}
+
+
+// ============================================================
+// Create
+// ============================================================
+
+bool NativeStartMenu::Create(
+    HWND hwndOwner)
+{
+    if (hwndOwner)
+        _hwndOwner = hwndOwner;
+
+
+    WNDCLASSW wc = {};
+
+    wc.style =
+        CS_HREDRAW |
+        CS_VREDRAW;
+
+    wc.lpfnWndProc =
+        NativeStartMenu::WindowProc;
+
+    wc.hInstance =
+        GetModuleHandleW(NULL);
+
+    wc.hCursor =
+        LoadCursorW(
+            NULL,
+            IDC_ARROW);
+
+    wc.hbrBackground =
+        (HBRUSH)(COLOR_MENU + 1);
+
+    wc.lpszClassName =
+        L"NativeStartMenuWindow";
+
+
+    static bool registered = false;
+
+    if (!registered)
+    {
+        ATOM atom =
+            RegisterClassW(&wc);
+
+        if (!atom)
+        {
+            DWORD error =
+                GetLastError();
+
+            if (error !=
+                ERROR_CLASS_ALREADY_EXISTS)
+            {
+                return false;
+            }
+        }
+
+        registered = true;
+    }
+
+
+    _hwndMenu =
+        CreateWindowExW(
+            WS_EX_TOOLWINDOW |
+            WS_EX_NOACTIVATE,
+            L"NativeStartMenuWindow",
+            L"",
+            WS_POPUP,
+            0,
+            0,
+            NATIVE_STARTMENU_WIDTH,
+            100,
+            _hwndOwner,
+            NULL,
+            GetModuleHandleW(NULL),
+            this);
+
+
+    if (!_hwndMenu)
+        return false;
+
+
+    _hMenu =
+        CreatePopupMenu();
+
+    if (!_hMenu)
+    {
+        DestroyWindow(
+            _hwndMenu);
+
+        _hwndMenu = NULL;
+
+        return false;
+    }
+
+
+    BuildMenu();
+
+    return true;
+}
+
+
+// ============================================================
+// SetStartButton
+// ============================================================
+
+void NativeStartMenu::SetStartButton(
+    HWND hwndStartButton)
+{
+    _hwndStartButton =
+        hwndStartButton;
+}
+
+
+// ============================================================
+// Toggle
+// ============================================================
+
+void NativeStartMenu::Toggle()
+{
+    if (_visible)
+        Hide();
+    else
+        Show();
+}
+
+
+// ============================================================
+// Show
+// ============================================================
+
+void NativeStartMenu::Show()
+{
+    if (!_hwndMenu)
+        return;
+
+    if (!_hMenu)
+        return;
+
+
+    /*
+     * 菜单已经显示
+     */
+    if (_visible)
+        return;
+
+
+    /*
+     * 找开始按钮位置
+     */
+    RECT rcButton = {};
+
+    if (_hwndStartButton &&
+        IsWindow(_hwndStartButton))
+    {
+        GetWindowRect(
+            _hwndStartButton,
+            &rcButton);
+    }
+    else
+    {
+        SystemParametersInfoW(
+            SPI_GETWORKAREA,
+            0,
+            &rcButton,
+            0);
+    }
+
+
+    /*
+     * 这里使用经典开始菜单的大致尺寸。
+     *
+     * 真正菜单高度由 Windows 菜单系统决定。
+     */
+    int menuWidth =
+        NATIVE_STARTMENU_WIDTH;
+
+
+    int menuHeight =
+        420;
+
+
+    int x =
+        rcButton.left;
+
+
+    int y =
+        rcButton.top -
+        menuHeight;
+
+
+    /*
+     * 工作区
+     */
+    RECT workArea = {};
+
+    SystemParametersInfoW(
+        SPI_GETWORKAREA,
+        0,
+        &workArea,
+        0);
+
+
+    /*
+     * 如果上方放不下，就放到开始按钮下面。
+     */
+    if (y < workArea.top)
+    {
+        y =
+            rcButton.bottom;
+    }
+
+
+    /*
+     * 右边界
+     */
+    if (x + menuWidth >
+        workArea.right)
+    {
+        x =
+            workArea.right -
+            menuWidth;
+    }
+
+
+    /*
+     * 先设置一个窗口位置。
+     *
+     * 这个窗口本身只是 NativeStartMenu
+     * 的宿主。
+     */
+    SetWindowPos(
+        _hwndMenu,
+        HWND_TOP,
+        x,
+        y,
+        menuWidth,
+        menuHeight,
+        SWP_NOACTIVATE);
+
+
+    _visible = true;
+
+
+    /*
+     * 显示菜单。
+     */
+    SetForegroundWindow(
+        _hwndMenu);
+
+
+    UINT flags =
+        TPM_LEFTALIGN |
+        TPM_TOPALIGN |
+        TPM_LEFTBUTTON |
+        TPM_RIGHTBUTTON |
+        TPM_RETURNCMD;
+
+
+    int command =
+        TrackPopupMenuEx(
+            _hMenu,
+            flags,
+            x,
+            y,
+            _hwndMenu,
+            NULL);
+
+
+    /*
+     * TrackPopupMenuEx 返回以后，
+     * 菜单已经关闭。
+     */
+    _visible = false;
+
+
+    /*
+     * 用户选择了一个项目。
+     */
+    if (command != 0)
+    {
+        ExecuteCommand(
+            (UINT)command);
+    }
+
+
+    /*
+     * 恢复前台窗口。
+     */
+    if (_hwndOwner &&
+        IsWindow(_hwndOwner))
+    {
+        SetForegroundWindow(
+            _hwndOwner);
+    }
+}
+
+
+// ============================================================
+// Hide
+// ============================================================
+
+void NativeStartMenu::Hide()
+{
+    if (!_hwndMenu)
+        return;
+
+
+    _visible = false;
+
+
+    /*
+     * TrackPopupMenuEx 正在运行时，
+     * EndMenu 可以主动结束菜单跟踪。
+     */
+    EndMenu();
+
+
+    ShowWindow(
+        _hwndMenu,
+        SW_HIDE);
+}
+
+
+// ============================================================
+// IsVisible
+// ============================================================
+
+bool NativeStartMenu::IsVisible() const
+{
+    return _visible;
+}
+
+
+// ============================================================
+// BuildMenu
+// ============================================================
+
+void NativeStartMenu::BuildMenu()
+{
+    if (!_hMenu)
+        return;
+
+
+    /*
+     * 如果重复 Build，
+     * 先清空旧菜单。
+     */
+    while (GetMenuItemCount(_hMenu) > 0)
+    {
+        DeleteMenu(
+            _hMenu,
+            0,
+            MF_BYPOSITION);
+    }
+
+
+    BuildMainMenu(
+        _hMenu);
+}
+
+
+// ============================================================
+// BuildMainMenu
+// ============================================================
+
+void NativeStartMenu::BuildMainMenu(
+    HMENU hMenu)
+{
+    if (!hMenu)
+        return;
+
+
+    /*
+     * Programs
+     */
+    HMENU hPrograms =
+        CreatePopupMenu();
+
+    if (hPrograms)
+    {
+        BuildProgramsMenu(
+            hPrograms);
+
+
+        if (GetMenuItemCount(
+                hPrograms) > 0)
+        {
+            InsertSubMenu(
+                hMenu,
+                hPrograms,
+                NATIVE_CMD_PROGRAMS,
+                L"Programs",
+                GetCommandIcon(
+                    NATIVE_CMD_PROGRAMS));
+        }
+        else
+        {
+            DestroyMenu(
+                hPrograms);
+        }
+    }
+
+
+    /*
+     * Documents
+     */
+    InsertShellFolder(
+        hMenu,
+        CSIDL_PERSONAL,
+        L"Documents");
+
+
+    /*
+     * Pictures
+     */
+    InsertShellFolder(
+        hMenu,
+        CSIDL_MYPICTURES,
+        L"Pictures");
+
+
+    /*
+     * Computer
+     */
+    InsertShellFolder(
+        hMenu,
+        CSIDL_DRIVES,
+        L"Computer");
+
+
+    /*
+     * Network
+     */
+    InsertShellFolder(
+        hMenu,
+        CSIDL_NETWORK,
+        L"Network");
+
+
+    /*
+     * 分隔线
+     */
+    InsertMenuW(
+        hMenu,
+        -1,
+        MF_BYPOSITION |
+        MF_SEPARATOR,
+        0,
+        NULL);
+
+
+    /*
+     * Settings
+     */
+    HMENU hSettings =
+        CreatePopupMenu();
+
+    if (hSettings)
+    {
+        InsertShellFolder(
+            hSettings,
+            CSIDL_CONTROLS,
+            L"Control Panel");
+
+
+        InsertShellFolder(
+            hSettings,
+            CSIDL_PRINTERS,
+            L"Printers");
+
+
+        InsertShellFolder(
+            hSettings,
+            CSIDL_NETWORK,
+            L"Network");
+
+
+        if (GetMenuItemCount(
+                hSettings) > 0)
+        {
+            InsertSubMenu(
+                hMenu,
+                hSettings,
+                NATIVE_CMD_SETTINGS,
+                L"Settings",
+                GetCommandIcon(
+                    NATIVE_CMD_SETTINGS));
+        }
+        else
+        {
+            DestroyMenu(
+                hSettings);
+        }
+    }
+
+
+    /*
+     * Search
+     */
+    InsertCommand(
+        hMenu,
+        NATIVE_CMD_SEARCH,
+        L"Search...");
+
+
+    /*
+     * Run
+     */
+    InsertCommand(
+        hMenu,
+        NATIVE_CMD_RUN,
+        L"Run...");
+
+
+    /*
+     * 分隔线
+     */
+    InsertMenuW(
+        hMenu,
+        -1,
+        MF_BYPOSITION |
+        MF_SEPARATOR,
+        0,
+        NULL);
+
+
+    /*
+     * Log Off
+     */
+    InsertCommand(
+        hMenu,
+        NATIVE_CMD_LOGOFF,
+        L"Log Off...");
+
+
+    /*
+     * Shut Down
+     */
+    InsertCommand(
+        hMenu,
+        NATIVE_CMD_SHUTDOWN,
+        L"Shut Down...");
+}
+
+
+// ============================================================
+// BuildProgramsMenu
+// ============================================================
+
+void NativeStartMenu::BuildProgramsMenu(
+    HMENU hMenu)
+{
+    if (!hMenu)
+        return;
+
+
+    std::vector<NativeProgramEntry>
+        entries;
+
+
+    WCHAR userPath[MAX_PATH] = {};
+
+    WCHAR commonPath[MAX_PATH] = {};
+
+
+    /*
+     * 当前用户 Programs
+     */
+    if (SUCCEEDED(
+        SHGetFolderPathW(
+            _hwndOwner,
+            CSIDL_PROGRAMS,
+            NULL,
+            SHGFP_TYPE_CURRENT,
+            userPath)))
+    {
+        std::vector<NativeProgramEntry>
+            userEntries;
+
+
+        CollectProgramsDirectory(
+            userPath,
+            userEntries);
+
+
+        MergeProgramEntries(
+            entries,
+            userEntries);
+    }
+
+
+    /*
+     * 所有用户 Programs
+     */
+    if (SUCCEEDED(
+        SHGetFolderPathW(
+            _hwndOwner,
+            CSIDL_COMMON_PROGRAMS,
+            NULL,
+            SHGFP_TYPE_CURRENT,
+            commonPath)))
+    {
+        std::vector<NativeProgramEntry>
+            commonEntries;
+
+
+        CollectProgramsDirectory(
+            commonPath,
+            commonEntries);
+
+
+        MergeProgramEntries(
+            entries,
+            commonEntries);
+    }
+
+
+    /*
+     * 排序
+     */
+    SortProgramEntries(
+        entries);
+
+
+    /*
+     * 转换成真正的 HMENU
+     */
+    BuildProgramMenuEntries(
+        hMenu,
+        entries);
+}
+
+
+// ============================================================
+// CollectProgramsDirectory
+// ============================================================
+
+bool NativeStartMenu::CollectProgramsDirectory(
+    LPCWSTR path,
+    std::vector<NativeProgramEntry>& entries)
+{
+    if (!path || !*path)
+        return false;
+
+
+    WCHAR searchPath[MAX_PATH] = {};
+
+
+    StringCchCopyW(
+        searchPath,
+        MAX_PATH,
+        path);
+
+
+    StringCchCatW(
+        searchPath,
+        MAX_PATH,
+        L"\\*");
+
+
+    WIN32_FIND_DATAW fd = {};
+
+
+    HANDLE hFind =
+        FindFirstFileW(
+            searchPath,
+            &fd);
+
+
+    if (hFind ==
+        INVALID_HANDLE_VALUE)
+    {
+        return false;
+    }
+
+
+    do
+    {
+        /*
+         * 排除 . 和 ..
+         */
+        if (!lstrcmpW(
+                fd.cFileName,
+                L".") ||
+            !lstrcmpW(
+                fd.cFileName,
+                L".."))
+        {
+            continue;
+        }
+
+
+        NativeProgramEntry entry = {};
+
+
+        StringCchCopyW(
+            entry.name,
+            MAX_PATH,
+            fd.cFileName);
+
+
+        StringCchCopyW(
+            entry.path,
+            MAX_PATH,
+            path);
+
+
+        StringCchCatW(
+            entry.path,
+            MAX_PATH,
+            L"\\");
+
+
+        StringCchCatW(
+            entry.path,
+            MAX_PATH,
+            fd.cFileName);
+
+
+        entry.directory =
+            (fd.dwFileAttributes &
+             FILE_ATTRIBUTE_DIRECTORY) != 0;
+
+
+        /*
+         * 文件夹
+         */
+        if (entry.directory)
+        {
+            CollectProgramsDirectory(
+                entry.path,
+                entry.children);
+
+
+            /*
+             * 空文件夹不显示
+             */
+            if (entry.children.empty())
+                continue;
+        }
+        else
+        {
+            /*
+             * 只处理这些入口
+             */
+            LPCWSTR ext =
+                PathFindExtensionW(
+                    entry.name);
+
+
+            if (!ext)
+                continue;
+
+
+            if (lstrcmpiW(
+                    ext,
+                    L".lnk") != 0 &&
+                lstrcmpiW(
+                    ext,
+                    L".exe") != 0 &&
+                lstrcmpiW(
+                    ext,
+                    L".cpl") != 0)
+            {
+                continue;
+            }
+        }
+
+
+        entries.push_back(
+            entry);
+
+    }
+    while (FindNextFileW(
+        hFind,
+        &fd));
+
+
+    FindClose(
+        hFind);
+
+
+    return !entries.empty();
+}
+
+
+// ============================================================
+// MergeProgramEntries
+// ============================================================
+
+void NativeStartMenu::MergeProgramEntries(
+    std::vector<NativeProgramEntry>& target,
+    std::vector<NativeProgramEntry>& source)
+{
+    for (size_t i = 0;
+         i < source.size();
+         ++i)
+    {
+        NativeProgramEntry& src =
+            source[i];
+
+
+        bool merged = false;
+
+
+        /*
+         * 只有目录才进行合并。
+         */
+        if (src.directory)
+        {
+            for (size_t j = 0;
+                 j < target.size();
+                 ++j)
+            {
+                NativeProgramEntry& dst =
+                    target[j];
+
+
+                if (!dst.directory)
+                    continue;
+
+
+                if (lstrcmpiW(
+                        dst.name,
+                        src.name) != 0)
+                {
+                    continue;
+                }
+
+
+                /*
+                 * 同名目录递归合并。
+                 */
+                MergeProgramEntries(
+                    dst.children,
+                    src.children);
+
+
+                merged = true;
+
+                break;
+            }
+        }
+
+
+        /*
+         * 不是同名目录，
+         * 直接加入。
+         */
+        if (!merged)
+        {
+            target.push_back(
+                src);
+        }
+    }
+}
+
+
+// ============================================================
+// SortProgramEntries
+// ============================================================
+
+static bool NativeProgramEntryLess(
+    const NativeProgramEntry& a,
+    const NativeProgramEntry& b)
+{
+    /*
+     * 文件夹优先。
+     */
+    if (a.directory !=
+        b.directory)
+    {
+        return a.directory;
+    }
+
+
+    /*
+     * 同类按照名称排序。
+     */
+    return lstrcmpiW(
+        a.name,
+        b.name) < 0;
+}
+
+
+void NativeStartMenu::SortProgramEntries(
+    std::vector<NativeProgramEntry>& entries)
+{
+    std::sort(
+        entries.begin(),
+        entries.end(),
+        NativeProgramEntryLess);
+
+
+    /*
+     * 子目录继续排序。
+     */
+    for (size_t i = 0;
+         i < entries.size();
+         ++i)
+    {
+        if (entries[i].directory)
+        {
+            SortProgramEntries(
+                entries[i].children);
+        }
+    }
+}
+
+
+// ============================================================
+// BuildProgramMenuEntries
+// ============================================================
+
+void NativeStartMenu::BuildProgramMenuEntries(
+    HMENU hMenu,
+    const std::vector<NativeProgramEntry>& entries)
+{
+    if (!hMenu)
+        return;
+
+
+    for (size_t i = 0;
+         i < entries.size();
+         ++i)
+    {
+        const NativeProgramEntry& entry =
+            entries[i];
+
+
+        /*
+         * 文件夹
+         */
+        if (entry.directory)
+        {
+            HMENU hSubMenu =
+                CreatePopupMenu();
+
+
+            if (!hSubMenu)
+                continue;
+
+
+            BuildProgramMenuEntries(
+                hSubMenu,
+                entry.children);
+
+
+            if (GetMenuItemCount(
+                    hSubMenu) <= 0)
+            {
+                DestroyMenu(
+                    hSubMenu);
+
+                continue;
+            }
+
+
+            SHFILEINFOW sfi = {};
+
+
+            SHGetFileInfoW(
+                entry.path,
+                FILE_ATTRIBUTE_DIRECTORY,
+                &sfi,
+                sizeof(sfi),
+                SHGFI_ICON |
+                SHGFI_SMALLICON);
+
+
+            InsertProgramSubMenu(
+                hMenu,
+                hSubMenu,
+                entry.name,
+                sfi.hIcon);
+
+
+            continue;
+        }
+
+
+        /*
+         * 程序
+         */
+        AddProgramsItem(
+            hMenu,
+            entry.path,
+            entry.name);
+    }
+}
+
+
+// ============================================================
+// AddProgramsItem
+// ============================================================
+
+void NativeStartMenu::AddProgramsItem(
+    HMENU hMenu,
+    LPCWSTR path,
+    LPCWSTR name)
+{
+    if (!hMenu ||
+        !path ||
+        !name)
+    {
+        return;
+    }
+
+
+    SHFILEINFOW sfi = {};
+
+
+    SHGetFileInfoW(
+        path,
+        0,
+        &sfi,
+        sizeof(sfi),
+        SHGFI_ICON |
+        SHGFI_SMALLICON);
+
+
+    WCHAR displayName[MAX_PATH] = {};
+
+
+    StringCchCopyW(
+        displayName,
+        MAX_PATH,
+        name);
+
+
+    /*
+     * 去掉扩展名。
+     */
+    PathRemoveExtensionW(
+        displayName);
+
+
+    NativeMenuItemData* data =
+        new NativeMenuItemData();
+
+
+    data->text =
+        _wcsdup(displayName);
+
+
+    data->hIcon =
+        sfi.hIcon;
+
+
+    data->pidl =
+        NULL;
+
+
+    data->path =
+        _wcsdup(path);
+
+
+    data->ownsText =
+        true;
+
+
+    data->hasSubMenu =
+        false;
+
+
+    data->ownerDraw =
+        false;
+
+
+    MENUITEMINFOW mii = {};
+
+
+    mii.cbSize =
+        sizeof(mii);
+
+
+    mii.fMask =
+        MIIM_ID |
+        MIIM_STRING |
+        MIIM_DATA;
+
+
+    /*
+     * 给程序一个稳定 ID。
+     *
+     * 这里不依赖 ID，
+     * 真正的路径放在 data->path。
+     */
+    static UINT nextProgramId =
+        51000;
+
+
+    mii.wID =
+        nextProgramId++;
+
+
+    if (nextProgramId >= 59999)
+        nextProgramId = 51000;
+
+
+    mii.dwTypeData =
+        (LPWSTR)data->text;
+
+
+    mii.dwItemData =
+        (ULONG_PTR)data;
+
+
+    if (!InsertMenuItemW(
+            hMenu,
+            -1,
+            TRUE,
+            &mii))
+    {
+        FreeMenuItemData(
+            data);
+    }
+}
+
+
+// ============================================================
+// InsertProgramSubMenu
+// ============================================================
+
+void NativeStartMenu::InsertProgramSubMenu(
+    HMENU hMenu,
+    HMENU hSubMenu,
+    LPCWSTR text,
+    HICON hIcon)
+{
+    if (!hMenu ||
+        !hSubMenu)
+    {
+        return;
+    }
+
+
+    NativeMenuItemData* data =
+        new NativeMenuItemData();
+
+
+    data->text =
+        _wcsdup(text);
+
+
+    data->hIcon =
+        hIcon;
+
+
+    data->pidl =
+        NULL;
+
+
+    data->path =
+        NULL;
+
+
+    data->ownsText =
+        true;
+
+
+    data->hasSubMenu =
+        true;
+
+
+    data->ownerDraw =
+        false;
+
+
+    MENUITEMINFOW mii = {};
+
+
+    mii.cbSize =
+        sizeof(mii);
+
+
+    mii.fMask =
+        MIIM_STRING |
+        MIIM_SUBMENU |
+        MIIM_DATA;
+
+
+    mii.dwTypeData =
+        (LPWSTR)data->text;
+
+
+    mii.hSubMenu =
+        hSubMenu;
+
+
+    mii.dwItemData =
+        (ULONG_PTR)data;
+
+
+    if (!InsertMenuItemW(
+            hMenu,
+            -1,
+            TRUE,
+            &mii))
+    {
+        FreeMenuItemData(
+            data);
+
+        DestroyMenu(
+            hSubMenu);
+    }
+}
+
+
+// ============================================================
+// InsertSubMenu
+// ============================================================
+
+void NativeStartMenu::InsertSubMenu(
+    HMENU hMenu,
+    HMENU hSubMenu,
+    UINT command,
+    LPCWSTR text,
+    HICON hIcon)
+{
+    if (!hMenu ||
+        !hSubMenu)
+    {
+        return;
+    }
+
+
+    NativeMenuItemData* data =
+        new NativeMenuItemData();
+
+
+    data->text =
+        _wcsdup(text);
+
+
+    data->hIcon =
+        hIcon;
+
+
+    data->pidl =
+        NULL;
+
+
+    data->path =
+        NULL;
+
+
+    data->ownsText =
+        true;
+
+
+    data->hasSubMenu =
+        true;
+
+
+    data->ownerDraw =
+        false;
+
+
+    MENUITEMINFOW mii = {};
+
+
+    mii.cbSize =
+        sizeof(mii);
+
+
+    mii.fMask =
+        MIIM_ID |
+        MIIM_STRING |
+        MIIM_SUBMENU |
+        MIIM_DATA;
+
+
+    mii.wID =
+        command;
+
+
+    mii.dwTypeData =
+        (LPWSTR)data->text;
+
+
+    mii.hSubMenu =
+        hSubMenu;
+
+
+    mii.dwItemData =
+        (ULONG_PTR)data;
+
+
+    if (!InsertMenuItemW(
+            hMenu,
+            -1,
+            TRUE,
+            &mii))
+    {
+        FreeMenuItemData(
+            data);
+
+        DestroyMenu(
+            hSubMenu);
+    }
+}
+
+
+// ============================================================
+// InsertCommand
+// ============================================================
+
+void NativeStartMenu::InsertCommand(
+    HMENU hMenu,
+    UINT command,
+    LPCWSTR text)
+{
+    if (!hMenu)
+        return;
+
+
+    NativeMenuItemData* data =
+        new NativeMenuItemData();
+
+
+    data->text =
+        _wcsdup(text);
+
+
+    data->hIcon =
+        GetCommandIcon(command);
+
+
+    data->pidl =
+        NULL;
+
+
+    data->path =
+        NULL;
+
+
+    data->ownsText =
+        true;
+
+
+    data->hasSubMenu =
+        false;
+
+
+    data->ownerDraw =
+        false;
+
+
+    MENUITEMINFOW mii = {};
+
+
+    mii.cbSize =
+        sizeof(mii);
+
+
+    mii.fMask =
+        MIIM_ID |
+        MIIM_STRING |
+        MIIM_DATA;
+
+
+    mii.wID =
+        command;
+
+
+    mii.dwTypeData =
+        (LPWSTR)data->text;
+
+
+    mii.dwItemData =
+        (ULONG_PTR)data;
+
+
+    if (!InsertMenuItemW(
+            hMenu,
+            -1,
+            TRUE,
+            &mii))
+    {
+        FreeMenuItemData(
+            data);
+    }
+}
+
+
+// ============================================================
+// InsertShellFolder
+// ============================================================
+
+void NativeStartMenu::InsertShellFolder(
+    HMENU hMenu,
+    int csidl,
+    LPCWSTR text)
+{
+    if (!hMenu)
+        return;
+
+
+    PIDLIST_ABSOLUTE pidl =
+        NULL;
+
+
+    if (FAILED(
+        SHGetSpecialFolderLocation(
+            _hwndOwner,
+            csidl,
+            &pidl)))
+    {
+        return;
+    }
+
+
+    SHFILEINFOW sfi = {};
+
+
+    SHGetFileInfoW(
+        (LPCWSTR)pidl,
+        0,
+        &sfi,
+        sizeof(sfi),
+        SHGFI_PIDL |
+        SHGFI_ICON |
+        SHGFI_SMALLICON);
+
+
+    NativeMenuItemData* data =
+        new NativeMenuItemData();
+
+
+    data->text =
+        _wcsdup(text);
+
+
+    data->hIcon =
+        sfi.hIcon;
+
+
+    data->pidl =
+        pidl;
+
+
+    data->path =
+        NULL;
+
+
+    data->ownsText =
+        true;
+
+
+    data->hasSubMenu =
+        false;
+
+
+    data->ownerDraw =
+        false;
+
+
+    MENUITEMINFOW mii = {};
+
+
+    mii.cbSize =
+        sizeof(mii);
+
+
+    mii.fMask =
+        MIIM_ID |
+        MIIM_STRING |
+        MIIM_DATA;
+
+
+    /*
+     * Shell folder使用固定 ID范围。
+     */
+    static UINT nextShellId =
+        60000;
+
+
+    mii.wID =
+        nextShellId++;
+
+
+    if (nextShellId >= 60999)
+        nextShellId = 60000;
+
+
+    mii.dwTypeData =
+        (LPWSTR)data->text;
+
+
+    mii.dwItemData =
+        (ULONG_PTR)data;
+
+
+    if (!InsertMenuItemW(
+            hMenu,
+            -1,
+            TRUE,
+            &mii))
+    {
+        FreeMenuItemData(
+            data);
+    }
+}
+
+
+// ============================================================
+// GetCommandIcon
+// ============================================================
+
+HICON NativeStartMenu::GetCommandIcon(
+    UINT command)
+{
+    LPCWSTR path = NULL;
+
+
+    switch (command)
+    {
+    case NATIVE_CMD_PROGRAMS:
+        path =
+            L"%SystemRoot%\\explorer.exe";
+        break;
+
+
+    case NATIVE_CMD_SETTINGS:
+        path =
+            L"%SystemRoot%\\System32\\control.exe";
+        break;
+
+
+    case NATIVE_CMD_SEARCH:
+        path =
+            L"%SystemRoot%\\explorer.exe";
+        break;
+
+
+    case NATIVE_CMD_RUN:
+        path =
+            L"%SystemRoot%\\explorer.exe";
+        break;
+
+
+    case NATIVE_CMD_LOGOFF:
+        path =
+            L"%SystemRoot%\\explorer.exe";
+        break;
+
+
+    case NATIVE_CMD_SHUTDOWN:
+        path =
+            L"%SystemRoot%\\explorer.exe";
+        break;
+
+
+    default:
+        return NULL;
+    }
+
+
+    WCHAR expanded[MAX_PATH] = {};
+
+
+    if (!ExpandEnvironmentStringsW(
+            path,
+            expanded,
+            MAX_PATH))
+    {
+        return NULL;
+    }
+
+
+    SHFILEINFOW sfi = {};
+
+
+    if (SHGetFileInfoW(
+            expanded,
+            0,
+            &sfi,
+            sizeof(sfi),
+            SHGFI_ICON |
+            SHGFI_SMALLICON))
+    {
+        return sfi.hIcon;
+    }
+
+
+    return NULL;
+}
+
+
+// ============================================================
+// ExecuteProgram
+// ============================================================
+
+void NativeStartMenu::ExecuteProgram(
+    LPCWSTR path)
+{
+    if (!path || !*path)
+        return;
+
+
+    SHELLEXECUTEINFOW sei = {};
+
+
+    sei.cbSize =
+        sizeof(sei);
+
+
+    sei.fMask =
+        SEE_MASK_FLAG_NO_UI;
+
+
+    sei.hwnd =
+        _hwndOwner;
+
+
+    sei.lpVerb =
+        L"open";
+
+
+    sei.lpFile =
+        path;
+
+
+    sei.nShow =
+        SW_SHOWNORMAL;
+
+
+    ShellExecuteExW(
+        &sei);
+}
+
+
+// ============================================================
+// ExecutePIDL
+// ============================================================
+
+void NativeStartMenu::ExecutePIDL(
+    PIDLIST_ABSOLUTE pidl)
+{
+    if (!pidl)
+        return;
+
+
+    SHELLEXECUTEINFOW sei = {};
+
+
+    sei.cbSize =
+        sizeof(sei);
+
+
+    sei.fMask =
+        SEE_MASK_IDLIST |
+        SEE_MASK_FLAG_NO_UI;
+
+
+    sei.hwnd =
+        _hwndOwner;
+
+
+    sei.lpIDList =
+        pidl;
+
+
+    sei.nShow =
+        SW_SHOWNORMAL;
+
+
+    ShellExecuteExW(
+        &sei);
+}
+
+
+// ============================================================
+// ExecuteCommand
+// ============================================================
+
+void NativeStartMenu::ExecuteCommand(
+    UINT command)
+{
+    /*
+     * 先在当前主菜单和子菜单中查找
+     * 对应的 NativeMenuItemData。
+     */
+    if (_hMenu)
+    {
+        std::vector<HMENU> menus;
+
+        menus.push_back(
+            _hMenu);
+
+
+        while (!menus.empty())
+        {
+            HMENU menu =
+                menus.back();
+
+            menus.pop_back();
+
+
+            int count =
+                GetMenuItemCount(menu);
+
+
+            for (int i = 0;
+                 i < count;
+                 ++i)
+            {
+                MENUITEMINFOW mii = {};
+
+                mii.cbSize =
+                    sizeof(mii);
+
+
+                mii.fMask =
+                    MIIM_ID |
+                    MIIM_DATA |
+                    MIIM_SUBMENU;
+
+
+                if (!GetMenuItemInfoW(
+                        menu,
+                        i,
+                        TRUE,
+                        &mii))
+                {
+                    continue;
+                }
+
+
+                if (mii.wID ==
+                    command &&
+                    mii.dwItemData)
+                {
+                    NativeMenuItemData* data =
+                        (NativeMenuItemData*)
+                        mii.dwItemData;
+
+
+                    if (data->path)
+                    {
+                        ExecuteProgram(
+                            data->path);
+
+                        return;
+                    }
+
+
+                    if (data->pidl)
+                    {
+                        ExecutePIDL(
+                            data->pidl);
+
+                        return;
+                    }
+                }
+
+
+                if (mii.hSubMenu)
+                {
+                    menus.push_back(
+                        mii.hSubMenu);
+                }
+            }
+        }
+    }
+
+
+    /*
+     * 固定命令。
+     */
+    switch (command)
+    {
+    case NATIVE_CMD_SEARCH:
+    {
+        ShellExecuteW(
+            _hwndOwner,
+            L"open",
+            L"search-ms:",
+            NULL,
+            NULL,
+            SW_SHOWNORMAL);
+
+        break;
+    }
+
+
+    case NATIVE_CMD_RUN:
+    {
+        ShellExecuteW(
+            _hwndOwner,
+            L"open",
+            L"shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}",
+            NULL,
+            NULL,
+            SW_SHOWNORMAL);
+
+        break;
+    }
+
+
+    case NATIVE_CMD_LOGOFF:
+    {
+        ExitWindowsEx(
+            EWX_LOGOFF,
+            0);
+
+        break;
+    }
+
+
+    case NATIVE_CMD_SHUTDOWN:
+    {
+        ExitWindowsEx(
+            EWX_SHUTDOWN |
+            EWX_POWEROFF,
+            0);
+
+        break;
+    }
+
+
+    default:
+        break;
+    }
+}
+
+
+// ============================================================
+// DrawSubMenuArrow
+// ============================================================
+
+void NativeStartMenu::DrawSubMenuArrow(
+    HDC hdc,
+    const RECT& rc,
+    bool selected)
+{
+    if (!hdc)
+        return;
+
+
+    int x =
+        rc.right - 12;
+
+
+    int y =
+        (rc.top + rc.bottom) / 2;
+
+
+    COLORREF color =
+        GetSysColor(
+            selected
+                ? COLOR_HIGHLIGHTTEXT
+                : COLOR_MENUTEXT);
+
+
+    HPEN hPen =
+        CreatePen(
+            PS_SOLID,
+            1,
+            color);
+
+
+    if (!hPen)
+        return;
+
+
+    HPEN oldPen =
+        (HPEN)SelectObject(
+            hdc,
+            hPen);
+
+
+    MoveToEx(
+        hdc,
+        x - 2,
+        y - 3,
+        NULL);
+
+
+    LineTo(
+        hdc,
+        x + 2,
+        y);
+
+
+    LineTo(
+        hdc,
+        x - 2,
+        y + 3);
+
+
+    SelectObject(
+        hdc,
+        oldPen);
+
+
+    DeleteObject(
+        hPen);
+}
+
+
+// ============================================================
+// DrawMenuItem
+// ============================================================
+
+void NativeStartMenu::DrawMenuItem(
+    DRAWITEMSTRUCT* dis)
+{
+    if (!dis)
+        return;
+
+
+    NativeMenuItemData* data =
+        (NativeMenuItemData*)
+        dis->itemData;
+
+
+    if (!data)
+        return;
+
+
+    HDC hdc =
+        dis->hDC;
+
+
+    RECT rc =
+        dis->rcItem;
+
+
+    bool selected =
+        (dis->itemState &
+         ODS_SELECTED) != 0;
+
+
+    COLORREF bkColor =
+        GetSysColor(
+            selected
+                ? COLOR_HIGHLIGHT
+                : COLOR_MENU);
+
+
+    COLORREF textColor =
+        GetSysColor(
+            selected
+                ? COLOR_HIGHLIGHTTEXT
+                : COLOR_MENUTEXT);
+
+
+    HBRUSH brush =
+        CreateSolidBrush(
+            bkColor);
+
+
+    if (brush)
+    {
+        FillRect(
+            hdc,
+            &rc,
+            brush);
+
+        DeleteObject(
+            brush);
+    }
+
+
+    /*
+     * 图标
+     */
+    const int iconSize =
+        20;
+
+
+    int iconX =
+        rc.left + 8;
+
+
+    int iconY =
+        rc.top +
+        ((rc.bottom -
+          rc.top -
+          iconSize) / 2);
+
+
+    if (data->hIcon)
+    {
+        DrawIconEx(
+            hdc,
+            iconX,
+            iconY,
+            data->hIcon,
+            iconSize,
+            iconSize,
+            0,
+            NULL,
+            DI_NORMAL);
+    }
+
+
+    /*
+     * 文字
+     */
+    RECT textRect =
+        rc;
+
+
+    textRect.left += 36;
+
+
+    if (data->hasSubMenu)
+    {
+        textRect.right -= 24;
+    }
+    else
+    {
+        textRect.right -= 8;
+    }
+
+
+    SetBkMode(
+        hdc,
+        TRANSPARENT);
+
+
+    SetTextColor(
+        hdc,
+        textColor);
+
+
+    DrawTextW(
+        hdc,
+        data->text,
+        -1,
+        &textRect,
+        DT_SINGLELINE |
+        DT_VCENTER |
+        DT_LEFT |
+        DT_NOPREFIX);
+
+
+    /*
+     * 子菜单箭头
+     */
+    if (data->hasSubMenu)
+    {
+        DrawSubMenuArrow(
+            hdc,
+            rc,
+            selected);
+    }
+
+
+    /*
+     * 焦点
+     */
+    if (dis->itemState &
+        ODS_FOCUS)
+    {
+        DrawFocusRect(
+            hdc,
+            &rc);
+    }
+}
+
+
+// ============================================================
+// MeasureMenuItem
+// ============================================================
+
+void NativeStartMenu::MeasureMenuItem(
+    MEASUREITEMSTRUCT* mis)
+{
+    if (!mis)
+        return;
+
+
+    mis->itemWidth =
+        NATIVE_STARTMENU_WIDTH;
+
+
+    mis->itemHeight =
+        NATIVE_STARTMENU_ITEM_HEIGHT;
+}
+
+
+// ============================================================
+// FreeMenuItemData
+// ============================================================
+
+void NativeStartMenu::FreeMenuItemData(
+    NativeMenuItemData* data)
+{
+    if (!data)
+        return;
+
+
+    if (data->hIcon)
+    {
+        DestroyIcon(
+            data->hIcon);
+
+        data->hIcon =
+            NULL;
+    }
+
+
+    if (data->pidl)
+    {
+        CoTaskMemFree(
+            data->pidl);
+
+        data->pidl =
+            NULL;
+    }
+
+
+    if (data->ownsText &&
+        data->text)
+    {
+        free(
+            (void*)data->text);
+
+        data->text =
+            NULL;
+    }
+
+
+    if (data->path)
+    {
+        free(
+            (void*)data->path);
+
+        data->path =
+            NULL;
+    }
+
+
+    delete data;
+}
+
+
+// ============================================================
+// WndProc
+// ============================================================
+
+LRESULT NativeStartMenu::WndProc(
+    UINT uMsg,
+    WPARAM wParam,
+    LPARAM lParam)
+{
+    switch (uMsg)
+    {
+    case WM_MEASUREITEM:
+    {
+        MeasureMenuItem(
+            (MEASUREITEMSTRUCT*)lParam);
+
+        return TRUE;
+    }
+
+
+    case WM_DRAWITEM:
+    {
+        DrawMenuItem(
+            (DRAWITEMSTRUCT*)lParam);
+
+        return TRUE;
+    }
+
+
+    case WM_COMMAND:
+    {
+        UINT command =
+            LOWORD(wParam);
+
+
+        ExecuteCommand(
+            command);
+
+        return 0;
+    }
+
+
+    case WM_KILLFOCUS:
+    {
+        /*
+         * 真正菜单由 TrackPopupMenuEx
+         * 控制，这里暂时不主动关闭。
+         */
+        break;
+    }
+
+
+    case WM_DESTROY:
+    {
+        _visible =
+            false;
+
+        break;
+    }
+    }
+
+
+    return DefWindowProcW(
+        _hwndMenu,
+        uMsg,
+        wParam,
+        lParam);
+}
+
+
+// ============================================================
+// WindowProc
+// ============================================================
+
+LRESULT CALLBACK
+NativeStartMenu::WindowProc(
+    HWND hwnd,
+    UINT uMsg,
+    WPARAM wParam,
+    LPARAM lParam)
+{
+    NativeStartMenu* menu =
+        (NativeStartMenu*)
+        GetWindowLongPtrW(
+            hwnd,
+            GWLP_USERDATA);
+
+
+    if (uMsg ==
+        WM_NCCREATE)
+    {
+        CREATESTRUCTW* cs =
+            (CREATESTRUCTW*)lParam;
+
+
+        menu =
+            (NativeStartMenu*)
+            cs->lpCreateParams;
+
+
+        SetWindowLongPtrW(
+            hwnd,
+            GWLP_USERDATA,
+            (LONG_PTR)menu);
+
+
+        if (menu)
+        {
+            menu->_hwndMenu =
+                hwnd;
+        }
+    }
+
+
+    if (menu)
+    {
+        return menu->WndProc(
+            uMsg,
+            wParam,
+            lParam);
+    }
+
+
+    return DefWindowProcW(
+        hwnd,
+        uMsg,
+        wParam,
+        lParam);
+}
