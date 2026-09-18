@@ -1117,6 +1117,8 @@ void NativeStartMenu::AddProgramsItem(
     data->ownerDraw =
         true;
 
+    data->smallIcon =
+        true;
 
     MENUITEMINFOW mii = {};
 
@@ -1220,6 +1222,8 @@ void NativeStartMenu::InsertProgramSubMenu(
     data->ownerDraw =
         true;
 
+    data->smallIcon =
+        true;
 
     MENUITEMINFOW mii = {};
 
@@ -1313,6 +1317,8 @@ void NativeStartMenu::InsertSubMenu(
     data->ownerDraw =
         true;
 
+    data->smallIcon =
+        false;
 
     MENUITEMINFOW mii = {};
 
@@ -1406,6 +1412,8 @@ void NativeStartMenu::InsertCommand(
     data->ownerDraw =
         true;
 
+    data->smallIcon =
+        false;
 
     MENUITEMINFOW mii = {};
 
@@ -1518,6 +1526,8 @@ void NativeStartMenu::InsertShellFolder(
     data->ownerDraw =
         true;
 
+    data->smallIcon =
+        false;
 
     MENUITEMINFOW mii = {};
 
@@ -2034,7 +2044,9 @@ void NativeStartMenu::DrawMenuItem(
      * 图标
      */
     const int iconSize =
-        20;
+        data->smallIcon
+        ? 16
+        : 20;
 
 
     int iconX =
