@@ -301,7 +301,7 @@ void NativeStartMenu::Show()
 
     UINT flags =
         TPM_LEFTALIGN |
-        TPM_TOPALIGN |
+        TPM_BOTTOMALIGN |
         TPM_LEFTBUTTON |
         TPM_RIGHTBUTTON |
         TPM_RETURNCMD;
@@ -311,8 +311,8 @@ void NativeStartMenu::Show()
         TrackPopupMenuEx(
             _hMenu,
             flags,
-            x,
-            y,
+            rcButton.left,
+            rcButton.top,
             _hwndMenu,
             NULL);
 
