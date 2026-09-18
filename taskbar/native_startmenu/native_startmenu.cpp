@@ -2225,8 +2225,16 @@ void NativeStartMenu::MeasureMenuItem(
     mis->itemWidth =
         width;
 
-    mis->itemHeight =
-        NATIVE_STARTMENU_ITEM_HEIGHT;
+    if (data->smallIcon)
+    {
+        mis->itemHeight =
+            24;
+    }
+    else
+    {
+        mis->itemHeight =
+            NATIVE_STARTMENU_ITEM_HEIGHT;
+    }
 }
 
 // ============================================================
