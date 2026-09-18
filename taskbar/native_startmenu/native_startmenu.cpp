@@ -526,8 +526,48 @@ void NativeStartMenu::BuildMainMenu(
             L"Network");
 
 
-        if (GetMenuItemCount(
-                hSettings) > 0)
+        /*
+         * Settings 是一级菜单，
+         * 但里面的项目属于内层菜单。
+         *
+         * 把 Settings 子菜单中的项目
+         * 标记为小菜单样式。
+         */
+        int settingsCount =
+            GetMenuItemCount(
+                hSettings);
+
+        for (int i = 0;
+            i < settingsCount;
+            ++i)
+        {
+            MENUITEMINFOW mii = {};
+
+            mii.cbSize =
+                sizeof(mii);
+
+            mii.fMask =
+                MIIM_DATA;
+
+            if (GetMenuItemInfoW(
+                hSettings,
+                i,
+                TRUE,
+                &mii))
+            {
+                NativeMenuItemData* data =
+                    (NativeMenuItemData*)
+                    mii.dwItemData;
+
+                if (data)
+                {
+                    data->smallIcon =
+                        true;
+                }
+            }
+        }
+
+        if (settingsCount > 0)
         {
             InsertSubMenu(
                 hMenu,
