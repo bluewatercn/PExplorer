@@ -17,6 +17,14 @@
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "PowrProf.lib")
 
+typedef void (WINAPI* RUNFILEDLG)(
+    HWND,
+    HICON,
+    LPCTSTR,
+    LPCTSTR,
+    LPCTSTR,
+    UINT);
+
 // ============================================================
 // NativeStartMenu
 // ============================================================
@@ -1901,17 +1909,22 @@ void NativeStartMenu::ExecuteCommand(
 
     case NATIVE_CMD_RUN:
     {
-        ShellExecuteW(
-            _hwndOwner,
-            L"open",
-            L"shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}",
-            NULL,
-            NULL,
-            SW_SHOWNORMAL);
+        RUNFILEDLG RunFileDlg =
+            (RUNFILEDLG)GetProcAddress(
+                GetModuleHandle(TEXT("shell32.dll")),
+                MAKEINTRESOURCEA(61));
+
+        if (RunFileDlg)
+            RunFileDlg(
+                _hwndOwner,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                0x4);
 
         break;
     }
-
 
     case NATIVE_CMD_LOGOFF:
         if (MessageBoxW(
