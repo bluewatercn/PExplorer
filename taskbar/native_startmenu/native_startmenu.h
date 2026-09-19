@@ -201,6 +201,9 @@ private:
     void FreeMenuItemData(
         NativeMenuItemData* data);
 
+    void ShowContextMenu(
+        HMENU hMenu,
+        UINT itemId);
 
     static LRESULT CALLBACK WindowProc(
         HWND hwnd,

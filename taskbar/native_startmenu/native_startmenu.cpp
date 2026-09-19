@@ -2366,6 +2366,34 @@ void NativeStartMenu::MeasureMenuItem(
 }
 
 // ============================================================
+// ShowContextMenu
+// ============================================================
+
+void NativeStartMenu::ShowContextMenu(
+    HMENU hMenu,
+    UINT itemIndex)
+{
+    if (!hMenu)
+        return;
+
+    MENUITEMINFOW mii = {};
+
+    mii.cbSize =
+        sizeof(mii);
+
+    mii.fMask =
+        MIIM_DATA;
+
+    if (!GetMenuItemInfoW(
+        hMenu,
+        itemIndex,
+        TRUE,
+        &mii))
+    {
+        return;
+    }
+}
+// ============================================================
 // FreeMenuItemData
 // ============================================================
 
@@ -2449,6 +2477,15 @@ LRESULT NativeStartMenu::WndProc(
         return TRUE;
     }
 
+
+    case WM_MENURBUTTONUP:
+    {
+        ShowContextMenu(
+            (HMENU)lParam,
+            (UINT)wParam);
+
+        return 0;
+    }
 
     case WM_COMMAND:
     {
