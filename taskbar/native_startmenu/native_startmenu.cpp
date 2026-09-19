@@ -1620,82 +1620,68 @@ void NativeStartMenu::InsertShellFolder(
 HICON NativeStartMenu::GetCommandIcon(
     UINT command)
 {
-    LPCWSTR path = NULL;
-
+    int resourceId = 0;
 
     switch (command)
     {
     case NATIVE_CMD_PROGRAMS:
-        path =
-            L"%SystemRoot%\\explorer.exe";
+        resourceId = 326;
         break;
-
 
     case NATIVE_CMD_SETTINGS:
-        path =
-            L"%SystemRoot%\\System32\\control.exe";
+        resourceId = 330;
         break;
-
-
-    case NATIVE_CMD_SEARCH:
-        path =
-            L"%SystemRoot%\\explorer.exe";
-        break;
-
 
     case NATIVE_CMD_RUN:
-        path =
-            L"%SystemRoot%\\explorer.exe";
+        resourceId = 328;
         break;
-
 
     case NATIVE_CMD_LOGOFF:
-        path =
-            L"%SystemRoot%\\explorer.exe";
+        resourceId = 325;
         break;
-
 
     case NATIVE_CMD_SHUTDOWN:
-        path =
-            L"%SystemRoot%\\explorer.exe";
+        resourceId = 329;
         break;
 
+    case NATIVE_CMD_RESTART:
+        resourceId = 329;
+        break;
 
     default:
         return NULL;
     }
 
-
-    WCHAR expanded[MAX_PATH] = {};
-
+    WCHAR path[MAX_PATH] = {};
 
     if (!ExpandEnvironmentStringsW(
-            path,
-            expanded,
-            MAX_PATH))
+        L"%SystemRoot%\\System32\\shell32.dll",
+        path,
+        MAX_PATH))
     {
         return NULL;
     }
 
+    HMODULE hShell32 = LoadLibraryExW(
+        path,
+        NULL,
+        LOAD_LIBRARY_AS_DATAFILE);
 
-    SHFILEINFOW sfi = {};
+    if (!hShell32)
+        return NULL;
 
+    HICON hIcon = (HICON)LoadImageW(
+        hShell32,
+        MAKEINTRESOURCEW(resourceId),
+        IMAGE_ICON,
+        16,
+        16,
+        LR_DEFAULTCOLOR);
 
-    if (SHGetFileInfoW(
-            expanded,
-            0,
-            &sfi,
-            sizeof(sfi),
-            SHGFI_ICON |
-            SHGFI_SMALLICON))
-    {
-        return sfi.hIcon;
-    }
+    FreeLibrary(hShell32);
 
-
-    return NULL;
+    return hIcon;
 }
-
 
 // ============================================================
 // ExecuteProgram
