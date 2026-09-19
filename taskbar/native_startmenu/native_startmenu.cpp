@@ -303,7 +303,6 @@ void NativeStartMenu::Show()
         TPM_LEFTALIGN |
         TPM_BOTTOMALIGN |
         TPM_LEFTBUTTON |
-        TPM_RIGHTBUTTON |
         TPM_RETURNCMD;
 
 
@@ -2376,13 +2375,20 @@ void NativeStartMenu::ShowContextMenu(
     if (!hMenu)
         return;
 
+    /*
+     * WM_MENURBUTTONUP:
+     *
+     * wParam = 菜单项的零基索引
+     * lParam = 当前 HMENU
+     */
     MENUITEMINFOW mii = {};
 
     mii.cbSize =
         sizeof(mii);
 
     mii.fMask =
-        MIIM_DATA;
+        MIIM_DATA |
+        MIIM_SUBMENU;
 
     if (!GetMenuItemInfoW(
         hMenu,
@@ -2392,7 +2398,253 @@ void NativeStartMenu::ShowContextMenu(
     {
         return;
     }
+
+    /*
+     * 有子菜单的项目不处理。
+     *
+     * 例如：
+     *
+     * Programs
+     * Accessories >
+     */
+    if (mii.hSubMenu)
+    {
+        return;
+    }
+
+    NativeMenuItemData* data =
+        (NativeMenuItemData*)
+        mii.dwItemData;
+
+    if (!data)
+        return;
+
+    /*
+     * 当前菜单项必须对应一个 Shell 对象。
+     */
+    if (!data->path &&
+        !data->pidl)
+    {
+        return;
+    }
+
+    /*
+     * --------------------------------------------------------
+     * 得到完整 PIDL
+     * --------------------------------------------------------
+     */
+
+    PIDLIST_ABSOLUTE pidl =
+        NULL;
+
+    if (data->path)
+    {
+        /*
+         * Programs 中的 .lnk / .exe
+         */
+        HRESULT hr =
+            SHParseDisplayName(
+                data->path,
+                NULL,
+                &pidl,
+                0,
+                NULL);
+
+        if (FAILED(hr) ||
+            !pidl)
+        {
+            return;
+        }
+    }
+    else
+    {
+        /*
+         * Settings 中的 Shell Folder
+         */
+        pidl =
+            ILClone(
+                data->pidl);
+
+        if (!pidl)
+        {
+            return;
+        }
+    }
+
+    /*
+     * --------------------------------------------------------
+     * 找到父 Shell Folder
+     * --------------------------------------------------------
+     */
+
+    IShellFolder* pParentFolder =
+        NULL;
+
+    LPCITEMIDLIST pidlChild =
+        NULL;
+
+    HRESULT hr =
+        SHBindToParent(
+            pidl,
+            IID_IShellFolder,
+            (void**)&pParentFolder,
+            &pidlChild);
+
+    if (FAILED(hr) ||
+        !pParentFolder ||
+        !pidlChild)
+    {
+        CoTaskMemFree(
+            pidl);
+
+        return;
+    }
+
+    /*
+     * --------------------------------------------------------
+     * 获取 Windows 原生 IContextMenu
+     * --------------------------------------------------------
+     */
+
+    IContextMenu* pContextMenu =
+        NULL;
+
+    hr =
+        pParentFolder->GetUIObjectOf(
+            _hwndMenu,
+            1,
+            &pidlChild,
+            IID_IContextMenu,
+            NULL,
+            (void**)&pContextMenu);
+
+    pParentFolder->Release();
+
+    if (FAILED(hr) ||
+        !pContextMenu)
+    {
+        CoTaskMemFree(
+            pidl);
+
+        return;
+    }
+
+    /*
+     * --------------------------------------------------------
+     * 创建 Shell 原生菜单
+     * --------------------------------------------------------
+     */
+
+    HMENU hContextMenu =
+        CreatePopupMenu();
+
+    if (!hContextMenu)
+    {
+        pContextMenu->Release();
+
+        CoTaskMemFree(
+            pidl);
+
+        return;
+    }
+
+    hr =
+        pContextMenu->QueryContextMenu(
+            hContextMenu,
+            0,
+            1,
+            0x7FFF,
+            CMF_NORMAL);
+
+    if (FAILED(hr))
+    {
+        DestroyMenu(
+            hContextMenu);
+
+        pContextMenu->Release();
+
+        CoTaskMemFree(
+            pidl);
+
+        return;
+    }
+
+    /*
+     * --------------------------------------------------------
+     * 鼠标当前位置
+     * --------------------------------------------------------
+     */
+
+    POINT pt = {};
+
+    GetCursorPos(
+        &pt);
+
+    /*
+     * --------------------------------------------------------
+     * 在当前 Start Menu 正处于菜单跟踪时，
+     * 嵌套弹出 Shell Context Menu。
+     *
+     * TPM_RECURSE 是关键。
+     * --------------------------------------------------------
+     */
+
+    int command =
+        TrackPopupMenuEx(
+            hContextMenu,
+            TPM_RETURNCMD |
+            TPM_RIGHTBUTTON |
+            TPM_LEFTALIGN |
+            TPM_TOPALIGN |
+            TPM_RECURSE,
+            pt.x,
+            pt.y,
+            _hwndMenu,
+            NULL);
+
+    /*
+     * --------------------------------------------------------
+     * 执行 Shell 命令
+     * --------------------------------------------------------
+     */
+
+    if (command)
+    {
+        CMINVOKECOMMANDINFO ici = {};
+
+        ici.cbSize =
+            sizeof(ici);
+
+        ici.hwnd =
+            _hwndMenu;
+
+        ici.lpVerb =
+            MAKEINTRESOURCEA(
+                command - 1);
+
+        ici.nShow =
+            SW_SHOWNORMAL;
+
+        pContextMenu->InvokeCommand(
+            &ici);
+    }
+
+    /*
+     * --------------------------------------------------------
+     * 清理
+     * --------------------------------------------------------
+     */
+
+    DestroyMenu(
+        hContextMenu);
+
+    pContextMenu->Release();
+
+    CoTaskMemFree(
+        pidl);
 }
+
+
 // ============================================================
 // FreeMenuItemData
 // ============================================================
