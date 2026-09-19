@@ -472,6 +472,14 @@ void NativeStartMenu::BuildMainMenu(
         CSIDL_PERSONAL,
         L"Documents");
 
+    /*
+     * Pictures
+     */
+    InsertShellFolder(
+        hMenu,
+        CSIDL_MYPICTURES,
+        L"Pictures");
+
 
     /*
      * Network
