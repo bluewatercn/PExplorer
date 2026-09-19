@@ -7,6 +7,7 @@
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <strsafe.h>
+#include <powrprof.h>
 
 #include <vector>
 #include <algorithm>
@@ -14,7 +15,7 @@
 
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "shlwapi.lib")
-
+#pragma comment(lib, "PowrProf.lib")
 
 // ============================================================
 // NativeStartMenu
@@ -615,6 +616,16 @@ void NativeStartMenu::BuildMainMenu(
             hShutdown,
             NATIVE_CMD_RESTART,
             L"Restart");
+
+        InsertCommand(
+            hShutdown,
+            NATIVE_CMD_SLEEP,
+            L"Sleep");
+
+        InsertCommand(
+            hShutdown,
+            NATIVE_CMD_HIBERNATE,
+            L"Hibernate");
 
         InsertSubMenu(
             hMenu,
@@ -1648,6 +1659,14 @@ HICON NativeStartMenu::GetCommandIcon(
         resourceId = 329;
         break;
 
+    case NATIVE_CMD_SLEEP:
+        resourceId = 329;
+        break;
+
+    case NATIVE_CMD_HIBERNATE:
+        resourceId = 329;
+        break;
+
     default:
         return NULL;
     }
@@ -1917,6 +1936,20 @@ void NativeStartMenu::ExecuteCommand(
         ExitWindowsEx(
             EWX_REBOOT,
             0);
+        break;
+
+    case NATIVE_CMD_SLEEP:
+        SetSuspendState(
+            FALSE,
+            FALSE,
+            FALSE);
+        break;
+
+    case NATIVE_CMD_HIBERNATE:
+        SetSuspendState(
+            TRUE,
+            FALSE,
+            FALSE);
         break;
 
 

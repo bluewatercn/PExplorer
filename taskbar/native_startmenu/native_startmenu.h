@@ -20,7 +20,8 @@
 #define NATIVE_CMD_LOGOFF               50009
 #define NATIVE_CMD_SHUTDOWN             50010
 #define NATIVE_CMD_RESTART              50011
-
+#define NATIVE_CMD_SLEEP                50012
+#define NATIVE_CMD_HIBERNATE            50013
 
 struct NativeMenuItemData
 {
