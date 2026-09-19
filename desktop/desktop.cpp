@@ -37,6 +37,7 @@
 #include <VersionHelpers.h>
 
 #include "../systemsettings/DesktopCommand.h"
+#include "../taskbar/native_startmenu/native_startmenu.h"
 
 enum WallPaperStyle {
     STYLE_WP_STRETCH = 0,
@@ -459,11 +460,11 @@ void DesktopWindow::ProcessHotKey(int id_hotkey)
         break;
 
     case IDHK_RUN:
-        //ShowLaunchDialog(_hwnd);
+        NativeStartMenu::Run();
         break;
 
     case IDHK_LOGOFF:
-       //  ShowLogoffDialog(_hwnd);
+        NativeStartMenu::Logoff();
         break;
 
     case IDHK_DESKTOP:

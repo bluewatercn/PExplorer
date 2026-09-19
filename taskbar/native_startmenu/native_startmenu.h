@@ -85,6 +85,8 @@ public:
 
     bool IsVisible() const;
 
+    static void Run();
+    static void Logoff();
 
     LRESULT WndProc(
         UINT uMsg,

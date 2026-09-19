@@ -389,6 +389,72 @@ bool NativeStartMenu::IsVisible() const
     return _visible;
 }
 
+// ============================================================
+// Run
+// ============================================================
+
+void NativeStartMenu::Run()
+{
+    RUNFILEDLG RunFileDlg =
+        (RUNFILEDLG)GetProcAddress(
+            GetModuleHandle(TEXT("shell32.dll")),
+            MAKEINTRESOURCEA(61));
+
+    if (!RunFileDlg)
+        return;
+
+    RECT rect = { 0 };
+
+#ifndef TASKBAR_AT_TOP
+    rect.top =
+        GetSystemMetrics(SM_CYSCREEN) -
+        DESKTOPBARBAR_HEIGHT;
+#endif
+
+    rect.right =
+        GetSystemMetrics(SM_CXSCREEN);
+
+    rect.bottom =
+        rect.top +
+        DESKTOPBARBAR_HEIGHT;
+
+    Static dlgOwner(
+        0,
+        0,
+        rect.left,
+        rect.top,
+        rect.right - rect.left,
+        rect.bottom - rect.top,
+        0,
+        0);
+
+    RunFileDlg(
+        dlgOwner,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        0x4);
+
+    DestroyWindow(dlgOwner);
+}
+
+// ============================================================
+// Logoff
+// ============================================================
+void NativeStartMenu::Logoff()
+{
+    if (MessageBoxW(
+        NULL,
+        L"Are you sure you want to log off?",
+        L"Log Off Windows",
+        MB_YESNO | MB_ICONQUESTION) == IDYES)
+    {
+        ExitWindowsEx(
+            EWX_LOGOFF,
+            0);
+    }
+}
 
 // ============================================================
 // BuildMenu
@@ -1908,33 +1974,13 @@ void NativeStartMenu::ExecuteCommand(
 
 
     case NATIVE_CMD_RUN:
-    {
-        RUNFILEDLG RunFileDlg =
-            (RUNFILEDLG)GetProcAddress(
-                GetModuleHandle(TEXT("shell32.dll")),
-                MAKEINTRESOURCEA(61));
-
-        if (RunFileDlg)
-            RunFileDlg(
-                _hwndOwner,
-                NULL,
-                NULL,
-                NULL,
-                NULL,
-                0x4);
-
+    
+        Run();
         break;
-    }
+
 
     case NATIVE_CMD_LOGOFF:
-        if (MessageBoxW(
-            _hwndMenu,
-            L"Are you sure you want to log off?",
-            L"Log Off Windows",
-            MB_YESNO | MB_ICONQUESTION) == IDYES)
-        {
-            ExitWindowsEx(EWX_LOGOFF, 0);
-        }
+        Logoff();
         break;
 
 
