@@ -2372,9 +2372,6 @@ void NativeStartMenu::ShowContextMenu(
     HMENU hMenu,
     UINT itemIndex)
 {
-    if (!hMenu)
-        return;
-
     /*
      * WM_MENURBUTTONUP:
      *
