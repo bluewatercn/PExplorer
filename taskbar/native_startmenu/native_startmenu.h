@@ -83,7 +83,6 @@ public:
 
 
     bool IsVisible() const;
-    bool ConsumeStartClick();
 
     static void Run();
     static void Logoff();
@@ -104,7 +103,6 @@ private:
 
 
     bool _visible;
-    bool _ignoreNextStartClick;
 
     HMENU _hMenu;
 

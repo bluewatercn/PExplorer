@@ -395,13 +395,7 @@ LRESULT StartButton::WndProc(
         {
             if (_nativeStartMenu)
             {
-                if (_nativeStartMenu->ConsumeStartClick())
-                    return 0;
-
-                if (!_nativeStartMenu->IsVisible())
-                {
-                    _nativeStartMenu->Toggle();
-                }
+                _nativeStartMenu->Toggle();
             }
         }
 
