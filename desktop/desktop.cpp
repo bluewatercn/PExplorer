@@ -459,11 +459,11 @@ void DesktopWindow::ProcessHotKey(int id_hotkey)
         break;
 
     case IDHK_RUN:
-        ShowLaunchDialog(_hwnd);
+        //ShowLaunchDialog(_hwnd);
         break;
 
     case IDHK_LOGOFF:
-         ShowLogoffDialog(_hwnd);
+       //  ShowLogoffDialog(_hwnd);
         break;
 
     case IDHK_DESKTOP:
@@ -667,9 +667,6 @@ LRESULT DesktopWindow::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
             SetShellWindow(0);
         break;
 
-    case WM_CLOSE:
-        ShowExitWindowsDialog(_hwnd);
-        break;
 
     case WM_SYSCOMMAND:
         if (wparam == SC_TASKLIST) {

@@ -52,12 +52,7 @@ extern void explorer_about(HWND hwndParent);
 // test for already running desktop instance
 extern BOOL IsAnyDesktopRunning(void);
 
-// show run dialog
-extern void ShowLaunchDialog(HWND hwndOwner);
-// show logoff dialog
-extern void ShowLogoffDialog(HWND hwndOwner);
-// show shutdown dialog
-extern void ShowExitWindowsDialog(HWND hwndOwner);
+
 
 #ifdef __cplusplus
 } // extern "C"

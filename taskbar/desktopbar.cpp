@@ -624,10 +624,6 @@ LRESULT DesktopBar::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
         break;
     }
 
-    case WM_CLOSE:
-        ShowExitWindowsDialog(_hwnd);
-        break;
-
     case WM_HOTKEY:
         ProcessHotKey((int)wparam);
         break;
