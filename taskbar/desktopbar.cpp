@@ -236,10 +236,27 @@ LRESULT DesktopBar::Init(LPCREATESTRUCT pcs)
     }
     COLORREF clrSWButtonPushed = JValueToColor(JCFG2_DEF("JS_STARTMENU", "start_pushed_bkcolor", (int)RGB(51, 53, 55)));
     HBRUSH hbrSWButtonPushed = CreateSolidBrush(clrSWButtonPushed);
+    
+    StartButton* startButton;
+
     if (idStartIcon != 0) {
-        new StartButton(hwndStart, idStartIcon, TASKBAR_BRUSH(), hbrSWButtonPushed, TASKBAR_TEXTCOLOR(), true);
-    } else {
-        new StartButton(hwndStart, starticon_normal, starticon_pushed, TASKBAR_BRUSH(), hbrSWButtonPushed, TASKBAR_TEXTCOLOR(), true);
+        startButton = new StartButton(
+            hwndStart,
+            idStartIcon,
+            TASKBAR_BRUSH(),
+            hbrSWButtonPushed,
+            TASKBAR_TEXTCOLOR(),
+            true);
+    }
+    else {
+        startButton = new StartButton(
+            hwndStart,
+            starticon_normal,
+            starticon_pushed,
+            TASKBAR_BRUSH(),
+            hbrSWButtonPushed,
+            TASKBAR_TEXTCOLOR(),
+            true);
     }
 
     /* Save the handle to the window, needed for push-state handling */
@@ -343,6 +360,10 @@ LRESULT DesktopBar::Init(LPCREATESTRUCT pcs)
             delete _nativeStartMenu;
             _nativeStartMenu = NULL;
         }
+        else
+        {
+            startButton->SetNativeStartMenu(_nativeStartMenu);
+        }
     }
 
     return 0;
@@ -352,17 +373,25 @@ LRESULT DesktopBar::Init(LPCREATESTRUCT pcs)
 StartButton::StartButton(HWND hwnd, UINT nid, HBRUSH hbrush, HBRUSH hbrush2,
     COLORREF textcolor, bool flat)
     : PictureButton2(hwnd, SizeIcon(nid, TASKBAR_ICON_SIZE),
-        SizeIcon(nid + 1, TASKBAR_ICON_SIZE), hbrush, hbrush2, textcolor, flat)
+        SizeIcon(nid + 1, TASKBAR_ICON_SIZE), hbrush, hbrush2, textcolor, flat),
+    _nativeStartMenu(NULL)
 {
 }
 
 StartButton::StartButton(HWND hwnd, HICON hIcon, HICON hIcon2, HBRUSH hbrush, HBRUSH hbrush2,
     COLORREF textcolor, bool flat)
-    : PictureButton2(hwnd, hIcon, hIcon2, hbrush, hbrush2, textcolor, flat)
+    : PictureButton2(hwnd, hIcon, hIcon2, hbrush, hbrush2, textcolor, flat),
+    _nativeStartMenu(NULL)
 {
 }
 
+void StartButton::SetNativeStartMenu(NativeStartMenu* menu)
+{
+    _nativeStartMenu = menu;
+}
+
 extern int VK_WIN_HOOK();
+#define WM_STARTMENU_TOGGLE (WM_APP + 1)
 
 LRESULT StartButton::WndProc(
     UINT nmsg,
@@ -374,14 +403,27 @@ LRESULT StartButton::WndProc(
     case WM_LBUTTONDOWN:
         if (VK_WIN_HOOK() == 0)
         {
-            SendMessage(
-                GetParent(_hwnd),
-                WM_COMMAND,
-                MAKEWPARAM(
-                    GetDlgCtrlID(_hwnd),
-                    0),
-                0);
+            if (_nativeStartMenu)
+            {
+                if (_nativeStartMenu->ConsumeStartClick())
+                    return 0;
+
+                if (!_nativeStartMenu->IsVisible())
+                {
+                    PostMessage(
+                        _hwnd,
+                        WM_STARTMENU_TOGGLE,
+                        0,
+                        0);
+                }
+            }
         }
+
+        return 0;
+
+    case WM_STARTMENU_TOGGLE:
+        if (_nativeStartMenu)
+            _nativeStartMenu->Toggle();
 
         return 0;
 
@@ -768,13 +810,6 @@ int DesktopBar::Command(int id, int code)
 {
     if (id == IDC_TOGGLEDESKTOP) id = ID_MINIMIZE_ALL;
     switch (id) {
-    case IDC_START: {
-        if (_nativeStartMenu)
-        {
-            _nativeStartMenu->Toggle();
-        }
-        break;
-    }
     case ID_ABOUT_EXPLORER:
         explorer_about(g_Globals._hwndDesktop);
         break;

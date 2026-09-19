@@ -37,6 +37,7 @@ NativeStartMenu::NativeStartMenu(
     _hwndStartButton(hwndStartButton),
     _hwndMenu(NULL),
     _visible(false),
+    _ignoreNextStartClick(false),
     _hMenu(NULL)
 {
 }
@@ -329,18 +330,9 @@ void NativeStartMenu::Show()
      * TrackPopupMenuEx 返回以后，
      * 菜单已经关闭。
      */
+    _ignoreNextStartClick = true;
     _visible = false;
 
-    MSG msg;
-
-while (PeekMessage(
-    &msg,
-    _hwndStartButton,
-    WM_LBUTTONDOWN,
-    WM_LBUTTONUP,
-    PM_REMOVE))
-{
-}
 
     /*
      * 用户选择了一个项目。
@@ -397,6 +389,19 @@ void NativeStartMenu::Hide()
 bool NativeStartMenu::IsVisible() const
 {
     return _visible;
+}
+
+// ============================================================
+// ConsumeStartClick
+// ============================================================
+
+bool NativeStartMenu::ConsumeStartClick()
+{
+    if (!_ignoreNextStartClick)
+        return false;
+
+    _ignoreNextStartClick = false;
+    return true;
 }
 
 // ============================================================
