@@ -65,13 +65,8 @@ NativeStartMenu::~NativeStartMenu()
 // Create
 // ============================================================
 
-bool NativeStartMenu::Create(
-    HWND hwndOwner)
+bool NativeStartMenu::Create()
 {
-    if (hwndOwner)
-        _hwndOwner = hwndOwner;
-
-
     WNDCLASSW wc = {};
 
     wc.style =
@@ -191,10 +186,7 @@ void NativeStartMenu::Toggle()
 
 void NativeStartMenu::Show()
 {
-    if (!_hwndMenu)
-        return;
-
-    if (!_hMenu)
+    if (!_hwndMenu || !_hMenu)
         return;
 
 
@@ -305,8 +297,8 @@ void NativeStartMenu::Show()
     /*
      * 显示菜单。
      */
-    SetForegroundWindow(
-        _hwndMenu);
+    //SetForegroundWindow(
+    //    _hwndMenu);
 
 
     UINT flags =

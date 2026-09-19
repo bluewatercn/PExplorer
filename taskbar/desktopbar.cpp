@@ -185,15 +185,6 @@ LRESULT DesktopBar::Init(LPCREATESTRUCT pcs)
     start_btn_width = JCFG2_DEF("JS_STARTMENU", "start_width", start_btn_width).ToInt();
     _taskbar_pos = start_btn_width + DPI_SX(start_btn_padding) + 1;
 
-    {
-        string_t def_value = TEXT("");
-        string_t start_command = TEXT("");
-
-        if (start_icon.compare(TEXT("empty")) == 0) {
-            def_value = TEXT("none");
-        }
-        start_command = JCFG2_DEF("JS_STARTMENU", "start_command", def_value).ToString();
-    }
     // create "Start" button
     static WNDCLASS wc;
     GetClassInfo(NULL, TEXT("BUTTON"), &wc);
@@ -355,7 +346,7 @@ LRESULT DesktopBar::Init(LPCREATESTRUCT pcs)
 
     if (_nativeStartMenu)
     {
-        if (!_nativeStartMenu->Create(_hwnd))
+        if (!_nativeStartMenu->Create())
         {
             delete _nativeStartMenu;
             _nativeStartMenu = NULL;
@@ -391,7 +382,6 @@ void StartButton::SetNativeStartMenu(NativeStartMenu* menu)
 }
 
 extern int VK_WIN_HOOK();
-#define WM_STARTMENU_TOGGLE (WM_APP + 1)
 
 LRESULT StartButton::WndProc(
     UINT nmsg,
@@ -410,20 +400,10 @@ LRESULT StartButton::WndProc(
 
                 if (!_nativeStartMenu->IsVisible())
                 {
-                    PostMessage(
-                        _hwnd,
-                        WM_STARTMENU_TOGGLE,
-                        0,
-                        0);
+                    _nativeStartMenu->Toggle();
                 }
             }
         }
-
-        return 0;
-
-    case WM_STARTMENU_TOGGLE:
-        if (_nativeStartMenu)
-            _nativeStartMenu->Toggle();
 
         return 0;
 

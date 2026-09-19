@@ -66,8 +66,7 @@ public:
     ~NativeStartMenu();
 
 
-    bool Create(
-        HWND hwndOwner);
+    bool Create();
 
 
     void SetStartButton(
