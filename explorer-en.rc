@@ -79,7 +79,6 @@ BEGIN
     POPUP ""
     BEGIN
         MENUITEM "Open Volume Control",         ID_TRAY_VOLUME
-        MENUITEM "Adjust Audio Properties",     ID_VOLUME_PROPERTIES
     END
 END
 

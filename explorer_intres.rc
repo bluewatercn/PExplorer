@@ -257,15 +257,9 @@ CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST DISCARDABLE PURE "WinXShell.exe.m
 #ifdef LANGUAGE_EN_US
 #include "explorer-en.rc"
 #endif
-#ifdef LANGUAGE_JA_JP
-#include "explorer-ja.rc"
-#endif
 
 // UTF-8
 #pragma code_page(65001)
-#ifdef LANGUAGE_RU_RU
-#include "explorer-ru.rc"
-#endif
 #ifdef LANGUAGE_ZH_CN
     #include "explorer-zh.rc"
 #endif

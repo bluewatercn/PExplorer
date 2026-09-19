@@ -343,9 +343,6 @@ LRESULT DesktopBar::Init(LPCREATESTRUCT pcs)
     RegisterHotkeys();
 
     // prepare Startmenu, but hide it for now
-    _startMenuRoot = GET_WINDOW(StartMenuRoot, StartMenuRoot::Create(_hwndStartButton, STARTMENUROOT_ICON_SIZE));
-    _startMenuRoot->_hwndStartButton = _hwndStartButton;
-
     _nativeStartMenu = new NativeStartMenu(
         _hwnd,
         _hwndStartButton);
@@ -451,8 +448,8 @@ void DesktopBar::ProcessHotKey(int id_hotkey)
 {
     switch (id_hotkey) {
     case IDHK_DESKTOP: {
-        if (_startMenuRoot && _startMenuRoot->IsStartMenuVisible()) {
-            ShowOrHideStartMenu(_startAction);
+        if (_nativeStartMenu && _nativeStartMenu->IsVisible()) {
+            _nativeStartMenu->Toggle();
         } else {
             g_Globals._desktop.ToggleMinimize();
         }
@@ -460,7 +457,9 @@ void DesktopBar::ProcessHotKey(int id_hotkey)
     }
 
     case IDHK_STARTMENU:
-        ShowOrHideStartMenu(_startAction);
+        if (_nativeStartMenu)
+            _nativeStartMenu->Toggle();
+
         break;
     }
 }
@@ -607,7 +606,8 @@ LRESULT DesktopBar::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
             else
                 return 0;           // disable any other resizing
         } else if (wparam == SC_TASKLIST)
-            ShowOrHideStartMenu(_startAction);
+            if (_nativeStartMenu)
+                _nativeStartMenu->Toggle();
         goto def;
 
     case WM_SIZE:
@@ -804,7 +804,6 @@ CShellDispatch::MinimizeAll: 19Fh
 CShellDispatch::UndoMinimizeALL:1A0h
 CShellDispatch::ShutdownWindows:1FAh
 */
-#define IDC_FILERUN        0x191
 #define IDC_TOGGLEDESKTOP  0x197
 
 extern void send_wxs_protocol_url(PWSTR pszName);
@@ -813,11 +812,7 @@ int DesktopBar::Command(int id, int code)
 {
     if (id == IDC_TOGGLEDESKTOP) id = ID_MINIMIZE_ALL;
     switch (id) {
-    case IDC_FILERUN:
-        _startMenuRoot->Command(IDC_LAUNCH, 0);
-        break;
     case IDC_START: {
-        //ShowOrHideStartMenu(_startAction);
         if (_nativeStartMenu)
         {
             _nativeStartMenu->Toggle();
@@ -865,9 +860,6 @@ int DesktopBar::Command(int id, int code)
         DestroyWindow(g_Globals._hwndDesktop);
         break;
     }
-    case ID_VOLUME_PROPERTIES:
-        launch_cpanel(_hwnd, TEXT("mmsys.cpl"));
-        break;
 
     default:
         if (_hwndQuickLaunch)
@@ -878,34 +870,6 @@ int DesktopBar::Command(int id, int code)
 
     return 0;
 }
-
-
-void DesktopBar::ShowOrHideStartMenu(const char *startAction)
-{
-    if (startAction[0] != '\0') {
-        if (stricmp(startAction, "none") == 0) return;
-
-        if (g_Globals._lua) {
-            g_Globals._lua->call(startAction);
-            return;
-        }
-    }
-
-    if (_startMenuRoot) {
-        // set the Button, if not set
-        if (!Button_GetState(_hwndStartButton))
-            Button_SetState(_hwndStartButton, TRUE);
-
-        if (_startMenuRoot->IsStartMenuVisible())
-            _startMenuRoot->CloseStartMenu();
-        else
-            _startMenuRoot->TrackStartmenu();
-
-        // StartMenu was closed, release button state
-        Button_SetState(_hwndStartButton, FALSE);
-    }
-}
-
 
 // copy data structure for tray notifications
 struct TrayNotifyCDS {

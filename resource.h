@@ -268,7 +268,6 @@
 #define ID_EXPLORE                      40012
 #define ID_TASKMGR                      40013
 #define ID_TRAY_VOLUME                  40014
-#define ID_VOLUME_PROPERTIES            40015
 #define ID_SHOW_HIDDEN_ICONS            40016
 #define ID_CONFIG_NOTIFYAREA            40017
 #define ID_CONFIG_TIME                  40018

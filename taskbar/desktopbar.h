@@ -100,7 +100,6 @@ protected:
     void    ControlResize(WPARAM wparam, LPARAM lparam);
     void    RegisterHotkeys(BOOL unreg = FALSE);
     void    ProcessHotKey(int id_hotkey);
-    void    ShowOrHideStartMenu(const char *startAction);
     LRESULT ProcessCopyData(COPYDATASTRUCT *pcd);
 
     WindowHandle _hwndTaskBar;
@@ -110,7 +109,6 @@ protected:
     /* Needed to make the StartButton pushed, if it's called by windowskey: SC_TASKLIST command */
     WindowHandle _hwndStartButton;
     char        _startAction[64];
-    struct StartMenuRoot *_startMenuRoot;
 
     HBITMAP _hbmQuickLaunchBack;
     int     _iQuickLaunchPadding;
