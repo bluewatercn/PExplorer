@@ -183,13 +183,6 @@ private:
     HICON GetCommandIcon(
         UINT command);
 
-
-    void DrawSubMenuArrow(
-        HDC hdc,
-        const RECT& rc,
-        bool selected);
-
-
     void DrawMenuItem(
         DRAWITEMSTRUCT* dis);
 

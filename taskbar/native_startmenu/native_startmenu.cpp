@@ -1917,80 +1917,6 @@ void NativeStartMenu::ExecuteCommand(
 
 
 // ============================================================
-// DrawSubMenuArrow
-// ============================================================
-
-void NativeStartMenu::DrawSubMenuArrow(
-    HDC hdc,
-    const RECT& rc,
-    bool selected)
-{
-    if (!hdc)
-        return;
-
-
-    int x =
-        rc.right - 12;
-
-
-    int y =
-        (rc.top + rc.bottom) / 2;
-
-
-    COLORREF color =
-        GetSysColor(
-            selected
-                ? COLOR_HIGHLIGHTTEXT
-                : COLOR_MENUTEXT);
-
-
-    HPEN hPen =
-        CreatePen(
-            PS_SOLID,
-            1,
-            color);
-
-
-    if (!hPen)
-        return;
-
-
-    HPEN oldPen =
-        (HPEN)SelectObject(
-            hdc,
-            hPen);
-
-
-    MoveToEx(
-        hdc,
-        x - 2,
-        y - 3,
-        NULL);
-
-
-    LineTo(
-        hdc,
-        x + 2,
-        y);
-
-
-    LineTo(
-        hdc,
-        x - 2,
-        y + 3);
-
-
-    SelectObject(
-        hdc,
-        oldPen);
-
-
-    DeleteObject(
-        hPen);
-}
-
-
-// ============================================================
 // DrawMenuItem
 // ============================================================
 
@@ -2196,19 +2122,6 @@ void NativeStartMenu::DrawMenuItem(
         DeleteObject(
             smallFont);
     }
-
-
-    /*
-     * 子菜单箭头
-     */
-    if (data->hasSubMenu)
-    {
-        DrawSubMenuArrow(
-            hdc,
-            rc,
-            selected);
-    }
-
 
     /*
      * 焦点
