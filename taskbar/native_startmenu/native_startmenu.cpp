@@ -297,8 +297,8 @@ void NativeStartMenu::Show()
     /*
      * 显示菜单。
      */
-    //SetForegroundWindow(
-    //    _hwndMenu);
+    SetForegroundWindow(
+        _hwndMenu);
 
 
     UINT flags =
