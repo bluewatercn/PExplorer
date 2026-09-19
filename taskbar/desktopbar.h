@@ -108,7 +108,6 @@ protected:
     WindowHandle _hwndrebar;
     /* Needed to make the StartButton pushed, if it's called by windowskey: SC_TASKLIST command */
     WindowHandle _hwndStartButton;
-    char        _startAction[64];
 
     HBITMAP _hbmQuickLaunchBack;
     int     _iQuickLaunchPadding;

@@ -33,7 +33,6 @@
 // #include "../DUI/Helper.h"
 #include "desktopbar.h"
 #include "taskbar.h"
-#include "startmenu.h"
 #include "traynotify.h"
 #include "quicklaunch.h"
 
@@ -190,20 +189,10 @@ LRESULT DesktopBar::Init(LPCREATESTRUCT pcs)
         string_t def_value = TEXT("");
         string_t start_command = TEXT("");
 
-        memset(_startAction, 0, sizeof(_startAction));
         if (start_icon.compare(TEXT("empty")) == 0) {
             def_value = TEXT("none");
         }
         start_command = JCFG2_DEF("JS_STARTMENU", "start_command", def_value).ToString();
-        if (start_command == TEXT("")) {
-            if (def_value == TEXT("none")) {
-                strcpy(_startAction, "none");
-            }
-        } else if (start_command.compare(TEXT("none")) == 0) {
-            strcpy(_startAction, "none");
-        } else {
-            strcpy(_startAction, (w2s(start_command)).c_str());
-        }
     }
     // create "Start" button
     static WNDCLASS wc;
@@ -375,62 +364,33 @@ StartButton::StartButton(HWND hwnd, HICON hIcon, HICON hIcon2, HBRUSH hbrush, HB
 
 extern int VK_WIN_HOOK();
 
-LRESULT StartButton::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
+LRESULT StartButton::WndProc(
+    UINT nmsg,
+    WPARAM wparam,
+    LPARAM lparam)
 {
-    switch (nmsg) {
-    // one click activation: handle button-down message, don't wait for button-up
+    switch (nmsg)
+    {
     case WM_LBUTTONDOWN:
-        if (!Button_GetState(_hwnd)) {
-            Button_SetState(_hwnd, TRUE);
-            SetCapture(_hwnd);
-            if (VK_WIN_HOOK() == 0) {
-                SendMessage(GetParent(_hwnd), WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(_hwnd), 0), 0);
-            }
+        if (VK_WIN_HOOK() == 0)
+        {
+            SendMessage(
+                GetParent(_hwnd),
+                WM_COMMAND,
+                MAKEWPARAM(
+                    GetDlgCtrlID(_hwnd),
+                    0),
+                0);
         }
-        Button_SetState(_hwnd, FALSE);
-        break;
 
-    // re-target mouse move messages while moving the mouse cursor through the start menu
-    case WM_MOUSEMOVE:
-        if (GetCapture() == _hwnd) {
-            POINT pt = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
-
-            ClientToScreen(_hwnd, &pt);
-            HWND hwnd = WindowFromPoint(pt);
-
-            if (hwnd && hwnd != _hwnd) {
-                ScreenToClient(hwnd, &pt);
-                SendMessage(hwnd, WM_MOUSEMOVE, 0, MAKELPARAM(pt.x, pt.y));
-            }
-        }
-        break;
-
-    case WM_LBUTTONUP:
-        if (GetCapture() == _hwnd) {
-            ReleaseCapture();
-
-            POINT pt = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
-
-            ClientToScreen(_hwnd, &pt);
-            HWND hwnd = WindowFromPoint(pt);
-
-            if (hwnd && hwnd != _hwnd) {
-                ScreenToClient(hwnd, &pt);
-                PostMessage(hwnd, WM_LBUTTONDOWN, 0, MAKELPARAM(pt.x, pt.y));
-                PostMessage(hwnd, WM_LBUTTONUP, 0, MAKELPARAM(pt.x, pt.y));
-            }
-        }
-        break;
-
-    case WM_CANCELMODE:
-        ReleaseCapture();
-        break;
+        return 0;
 
     default:
-        return super::WndProc(nmsg, wparam, lparam);
+        return super::WndProc(
+            nmsg,
+            wparam,
+            lparam);
     }
-
-    return 0;
 }
 
 #define AUTOREGISTERHOTKEY(unreg, hwnd, id,fsModifiers, vk)\

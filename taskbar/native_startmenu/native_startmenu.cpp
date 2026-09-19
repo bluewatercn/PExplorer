@@ -331,6 +331,16 @@ void NativeStartMenu::Show()
      */
     _visible = false;
 
+    MSG msg;
+
+while (PeekMessage(
+    &msg,
+    _hwndStartButton,
+    WM_LBUTTONDOWN,
+    WM_LBUTTONUP,
+    PM_REMOVE))
+{
+}
 
     /*
      * 用户选择了一个项目。
