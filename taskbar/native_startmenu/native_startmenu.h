@@ -19,6 +19,7 @@
 #define NATIVE_CMD_RUN                  50008
 #define NATIVE_CMD_LOGOFF               50009
 #define NATIVE_CMD_SHUTDOWN             50010
+#define NATIVE_CMD_RESTART              50011
 
 
 struct NativeMenuItemData

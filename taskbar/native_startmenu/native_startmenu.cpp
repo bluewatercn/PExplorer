@@ -601,10 +601,29 @@ void NativeStartMenu::BuildMainMenu(
     /*
      * Shut Down
      */
-    InsertCommand(
-        hMenu,
-        NATIVE_CMD_SHUTDOWN,
-        L"Shut Down...");
+    HMENU hShutdown =
+        CreatePopupMenu();
+
+    if (hShutdown)
+    {
+        InsertCommand(
+            hShutdown,
+            NATIVE_CMD_SHUTDOWN,
+            L"Shut Down");
+
+        InsertCommand(
+            hShutdown,
+            NATIVE_CMD_RESTART,
+            L"Restart");
+
+        InsertSubMenu(
+            hMenu,
+            hShutdown,
+            NATIVE_CMD_SHUTDOWN,
+            L"Shut Down",
+            GetCommandIcon(
+                NATIVE_CMD_SHUTDOWN));
+    }
 }
 
 
@@ -1890,24 +1909,29 @@ void NativeStartMenu::ExecuteCommand(
 
 
     case NATIVE_CMD_LOGOFF:
-    {
-        ExitWindowsEx(
-            EWX_LOGOFF,
-            0);
-
+        if (MessageBoxW(
+            _hwndMenu,
+            L"Are you sure you want to log off?",
+            L"Log Off Windows",
+            MB_YESNO | MB_ICONQUESTION) == IDYES)
+        {
+            ExitWindowsEx(EWX_LOGOFF, 0);
+        }
         break;
-    }
 
 
     case NATIVE_CMD_SHUTDOWN:
-    {
         ExitWindowsEx(
             EWX_SHUTDOWN |
             EWX_POWEROFF,
             0);
-
         break;
-    }
+
+    case NATIVE_CMD_RESTART:
+        ExitWindowsEx(
+            EWX_REBOOT,
+            0);
+        break;
 
 
     default:
