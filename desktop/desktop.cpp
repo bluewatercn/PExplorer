@@ -1394,22 +1394,6 @@ HRESULT DesktopShellView::DoDesktopContextMenu(int x, int y)
     PrintMenuInfo(hmenuSV, cmSV_ifs._pctxmenu, L"");
 #endif
 
-    if (JCFG3_DEF("JS_DESKTOP", "cascademenu", "WinXNew", TEXT("")).ToString() != TEXT("")) {
-        hmenuNew = GetWinXNewContextMenu();
-        if (!hmenuNew) {
-            return S_FALSE;
-        }
-        _pcmMenuMap[hmenuNew] = &cmNew_ifs;
-
-#if _DEBUG
-        _log_(FmtString(TEXT("NewMenu 0x%x"), hmenuNew));
-        _log_(TEXT("New"));
-        PrintMenuInfo(hmenuNew, cmNew_ifs._pctxmenu, L"");
-#endif
-
-        SetNewSubMenu(hmenuSV, hmenuNew, cmSV_ifs._pctxmenu);
-    }
-
     hmenu = hmenuSV;
 
     SetMenuCursorPos(x, y);
