@@ -808,7 +808,6 @@ struct DebugDropTarget : public IDropTarget
     LONG _ref;
     IDropTarget* _inner;
     IFolderView2* _folderView;
-    IShellView2* _shellView2;
     HWND _hwndListView;
 
     DebugDropTarget(
@@ -818,7 +817,6 @@ struct DebugDropTarget : public IDropTarget
         : _ref(1),
         _inner(inner),
         _folderView(NULL),
-        _shellView2(NULL),
         _hwndListView(hwndListView)
     {
         _inner->AddRef();
@@ -827,20 +825,12 @@ struct DebugDropTarget : public IDropTarget
             IID_IFolderView2,
             (void**)&_folderView
         );
-
-        shellView->QueryInterface(
-            IID_IShellView2,
-            (void**)&_shellView2
-        );
     }
 
     ~DebugDropTarget()
     {
         if (_folderView)
             _folderView->Release();
-
-        if (_shellView2)
-            _shellView2->Release();
 
         if (_inner)
             _inner->Release();
@@ -921,42 +911,184 @@ struct DebugDropTarget : public IDropTarget
         if (!effect)
             return E_POINTER;
 
-        /*
-         * Save the requested effect before calling the original
-         * ShellView Drop(), because it may change *effect to 0.
-         */
         DWORD requestedEffect = *effect;
 
-        int index = -1;
-        PITEMID_CHILD pidl = NULL;
+        /*
+         * Only handle:
+         *
+         *     desktop icon -> same desktop folder
+         *
+         * Otherwise let the native ShellView handle it normally.
+         */
+        HRESULT hrMove = E_NOINTERFACE;
 
-        if (_hwndListView)
+        if (_folderView)
+            hrMove = _folderView->IsMoveInSameFolder();
+
+        if (hrMove != S_OK ||
+            !(requestedEffect & DROPEFFECT_MOVE) ||
+            !_folderView)
         {
-            index = ListView_GetNextItem(
+            return _inner->Drop(
+                data,
+                key,
+                pt,
+                effect
+            );
+        }
+
+        /*
+         * Find the anchor item.
+         *
+         * GetFocusedItem() returns a ListView item index.
+         */
+        int anchorIndex = -1;
+
+        HRESULT hr = _folderView->GetFocusedItem(
+            &anchorIndex
+        );
+
+        if (FAILED(hr) || anchorIndex < 0)
+        {
+            anchorIndex = ListView_GetNextItem(
                 _hwndListView,
                 -1,
                 LVNI_SELECTED
             );
         }
 
-        /*
-         * Get the selected item's PIDL before calling the original
-         * Drop(), because the selection may change during Drop().
-         */
-        if (index >= 0 && _folderView)
+        if (anchorIndex < 0)
         {
-            _folderView->Item(
-                index,
-                &pidl
+            return _inner->Drop(
+                data,
+                key,
+                pt,
+                effect
             );
         }
 
         /*
-         * Let the original ShellView handle the Drop first.
+         * Get PIDL for the anchor item.
          *
-         * For an ordinary external drop this is the complete operation.
-         * For a same-folder desktop move, Windows currently returns
-         * S_OK but does not reposition the icon.
+         * GetItemPosition() requires LPCITEMIDLIST,
+         * not an integer item index.
+         */
+        PITEMID_CHILD anchorPidl = NULL;
+
+        hr = _folderView->Item(
+            anchorIndex,
+            &anchorPidl
+        );
+
+        if (FAILED(hr) || !anchorPidl)
+        {
+            return _inner->Drop(
+                data,
+                key,
+                pt,
+                effect
+            );
+        }
+
+        /*
+         * Get the original position of the anchor item.
+         */
+        POINT anchorPosition = { 0, 0 };
+
+        hr = _folderView->GetItemPosition(
+            anchorPidl,
+            &anchorPosition
+        );
+
+        CoTaskMemFree(anchorPidl);
+
+        if (FAILED(hr))
+        {
+            return _inner->Drop(
+                data,
+                key,
+                pt,
+                effect
+            );
+        }
+
+        /*
+         * Convert drop position from screen coordinates
+         * to ListView client coordinates.
+         */
+        POINT dropPosition = {
+            pt.x,
+            pt.y
+        };
+
+        ScreenToClient(
+            _hwndListView,
+            &dropPosition
+        );
+
+        /*
+         * Calculate the movement offset.
+         */
+        LONG dx =
+            dropPosition.x - anchorPosition.x;
+
+        LONG dy =
+            dropPosition.y - anchorPosition.y;
+
+        /*
+         * Collect all selected items before calling Drop().
+         *
+         * Drop() may change the selection, so we must save
+         * everything first.
+         */
+        vector<PCUITEMID_CHILD> pidls;
+        vector<POINT> positions;
+
+        int index = -1;
+
+        while ((index = ListView_GetNextItem(
+            _hwndListView,
+            index,
+            LVNI_SELECTED)) != -1)
+        {
+            PITEMID_CHILD pidl = NULL;
+
+            if (FAILED(_folderView->Item(
+                index,
+                &pidl)))
+            {
+                continue;
+            }
+
+            POINT position = { 0, 0 };
+
+            /*
+             * GetItemPosition() requires the item's PIDL.
+             */
+            if (FAILED(_folderView->GetItemPosition(
+                pidl,
+                &position)))
+            {
+                CoTaskMemFree(pidl);
+                continue;
+            }
+
+            pidls.push_back(pidl);
+            positions.push_back(position);
+        }
+
+        if (pidls.empty())
+        {
+            return _inner->Drop(
+                data,
+                key,
+                pt,
+                effect
+            );
+        }
+
+        /*
+         * Let the native ShellView perform the actual Drop().
          */
         HRESULT hrDrop = _inner->Drop(
             data,
@@ -966,42 +1098,71 @@ struct DebugDropTarget : public IDropTarget
         );
 
         /*
-         * Same-folder desktop icon move.
-         *
-         * We already verified that Windows reports this through
-         * IFolderView2::IsMoveInSameFolder(), and that
-         * IShellView2::SelectAndPositionItem() successfully moves
-         * the icon.
+         * If the native Drop() failed, do not change
+         * the icon positions.
          */
-        if (pidl &&
-            _folderView &&
-            _shellView2 &&
-            SUCCEEDED(_folderView->IsMoveInSameFolder()) &&
-            (requestedEffect & DROPEFFECT_MOVE))
+        if (FAILED(hrDrop))
         {
-            POINT position = {
-                pt.x,
-                pt.y
-            };
-
-            HRESULT hrPosition =
-                _shellView2->SelectAndPositionItem(
-                    pidl,
-                    SVSI_POSITIONITEM |
-                    SVSI_SELECT |
-                    SVSI_NOTAKEFOCUS |
-                    SVSI_TRANSLATEPT,
-                    &position
-                );
-
-            if (SUCCEEDED(hrPosition))
+            for (size_t i = 0; i < pidls.size(); ++i)
             {
-                *effect = DROPEFFECT_MOVE;
+                if (pidls[i])
+                    CoTaskMemFree(
+                        (void*)pidls[i]
+                    );
             }
+
+            return hrDrop;
         }
 
-        if (pidl)
-            CoTaskMemFree(pidl);
+        /*
+         * Calculate the new position of every selected item.
+         *
+         * The relative distance between the selected icons
+         * is preserved.
+         */
+        vector<POINT> newPositions;
+
+        newPositions.resize(
+            positions.size()
+        );
+
+        for (size_t i = 0; i < positions.size(); ++i)
+        {
+            newPositions[i].x =
+                positions[i].x + dx;
+
+            newPositions[i].y =
+                positions[i].y + dy;
+        }
+
+        /*
+         * Ask Windows Shell to position all selected items.
+         */
+        HRESULT hrPosition =
+            _folderView->SelectAndPositionItems(
+                (UINT)pidls.size(),
+                pidls.data(),
+                newPositions.data(),
+                SVSI_POSITIONITEM |
+                SVSI_SELECT |
+                SVSI_NOTAKEFOCUS
+            );
+
+        /*
+         * Release PIDLs returned by IFolderView::Item().
+         */
+        for (size_t i = 0; i < pidls.size(); ++i)
+        {
+            if (pidls[i])
+                CoTaskMemFree(
+                    (void*)pidls[i]
+                );
+        }
+
+        if (SUCCEEDED(hrPosition))
+        {
+            *effect = DROPEFFECT_MOVE;
+        }
 
         return hrDrop;
     }
