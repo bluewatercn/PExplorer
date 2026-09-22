@@ -49,6 +49,329 @@ enum WallPaperStyle {
 static BOOL (WINAPI *SetShellWindow)(HWND);
 static BOOL (WINAPI *SetShellWindowEx)(HWND, HWND);
 
+static bool GetDesktopPositionFile(
+    TCHAR* path,
+    DWORD cchPath)
+{
+    DWORD len = GetModuleFileName(
+        NULL,
+        path,
+        cchPath
+    );
+
+    if (!len || len >= cchPath)
+        return false;
+
+    TCHAR* slash = _tcsrchr(
+        path,
+        TEXT('\\')
+    );
+
+    if (!slash)
+        return false;
+
+    *(slash + 1) = TEXT('\0');
+
+    _tcscat_s(
+        path,
+        cchPath,
+        TEXT("desktop_positions.dat")
+    );
+
+    return true;
+}
+
+
+static HRESULT SaveDesktopPositions(
+    IFolderView2* folderView)
+{
+    if (!folderView)
+        return E_INVALIDARG;
+
+    TCHAR filename[MAX_PATH];
+
+    if (!GetDesktopPositionFile(
+        filename,
+        MAX_PATH))
+    {
+        return E_FAIL;
+    }
+
+    HANDLE hFile = CreateFile(
+        filename,
+        GENERIC_WRITE,
+        0,
+        NULL,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL
+    );
+
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        return HRESULT_FROM_WIN32(
+            GetLastError()
+        );
+    }
+
+    const DWORD magic = 0x50454950;
+    const DWORD version = 1;
+
+    DWORD written = 0;
+
+    if (!WriteFile(
+        hFile,
+        &magic,
+        sizeof(magic),
+        &written,
+        NULL) ||
+        written != sizeof(magic))
+    {
+        CloseHandle(hFile);
+        return E_FAIL;
+    }
+
+    if (!WriteFile(
+        hFile,
+        &version,
+        sizeof(version),
+        &written,
+        NULL) ||
+        written != sizeof(version))
+    {
+        CloseHandle(hFile);
+        return E_FAIL;
+    }
+
+    IEnumIDList* enumIDList = NULL;
+
+    HRESULT hr = folderView->Items(
+        SVGIO_ALLVIEW,
+        IID_IEnumIDList,
+        (void**)&enumIDList
+    );
+
+    if (FAILED(hr) || !enumIDList)
+    {
+        CloseHandle(hFile);
+        return FAILED(hr) ? hr : E_FAIL;
+    }
+
+    while (true)
+    {
+        PITEMID_CHILD pidl = NULL;
+        ULONG fetched = 0;
+
+        hr = enumIDList->Next(
+            1,
+            &pidl,
+            &fetched
+        );
+
+        if (hr != S_OK || fetched != 1)
+            break;
+
+        POINT pt = { 0, 0 };
+
+        HRESULT hrPosition =
+            folderView->GetItemPosition(
+                pidl,
+                &pt
+            );
+
+        if (SUCCEEDED(hrPosition))
+        {
+            UINT pidlSize = ILGetSize(
+                pidl
+            );
+
+            if (pidlSize != 0 &&
+                pidlSize < 0x10000)
+            {
+                if (!WriteFile(
+                    hFile,
+                    &pidlSize,
+                    sizeof(pidlSize),
+                    &written,
+                    NULL) ||
+                    written != sizeof(pidlSize))
+                {
+                    CoTaskMemFree(pidl);
+                    break;
+                }
+
+                if (!WriteFile(
+                    hFile,
+                    pidl,
+                    pidlSize,
+                    &written,
+                    NULL) ||
+                    written != pidlSize)
+                {
+                    CoTaskMemFree(pidl);
+                    break;
+                }
+
+                if (!WriteFile(
+                    hFile,
+                    &pt,
+                    sizeof(pt),
+                    &written,
+                    NULL) ||
+                    written != sizeof(pt))
+                {
+                    CoTaskMemFree(pidl);
+                    break;
+                }
+            }
+        }
+
+        CoTaskMemFree(pidl);
+    }
+
+    enumIDList->Release();
+
+    CloseHandle(hFile);
+
+    return S_OK;
+}
+
+
+static HRESULT RestoreDesktopPositions(
+    IFolderView2* folderView)
+{
+    if (!folderView)
+        return E_INVALIDARG;
+
+    TCHAR filename[MAX_PATH];
+
+    if (!GetDesktopPositionFile(
+        filename,
+        MAX_PATH))
+    {
+        return E_FAIL;
+    }
+
+    HANDLE hFile = CreateFile(
+        filename,
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL
+    );
+
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        return HRESULT_FROM_WIN32(
+            GetLastError()
+        );
+    }
+
+    DWORD magic = 0;
+    DWORD version = 0;
+    DWORD read = 0;
+
+    if (!ReadFile(
+        hFile,
+        &magic,
+        sizeof(magic),
+        &read,
+        NULL) ||
+        read != sizeof(magic) ||
+        magic != 0x50454950)
+    {
+        CloseHandle(hFile);
+        return E_FAIL;
+    }
+
+    if (!ReadFile(
+        hFile,
+        &version,
+        sizeof(version),
+        &read,
+        NULL) ||
+        read != sizeof(version) ||
+        version != 1)
+    {
+        CloseHandle(hFile);
+        return E_FAIL;
+    }
+
+    while (true)
+    {
+        DWORD pidlSize = 0;
+
+        if (!ReadFile(
+            hFile,
+            &pidlSize,
+            sizeof(pidlSize),
+            &read,
+            NULL) ||
+            read != sizeof(pidlSize))
+        {
+            break;
+        }
+
+        if (pidlSize == 0 ||
+            pidlSize >= 0x10000)
+        {
+            break;
+        }
+
+        PITEMID_CHILD pidl =
+            (PITEMID_CHILD)CoTaskMemAlloc(
+                pidlSize
+            );
+
+        if (!pidl)
+            break;
+
+        if (!ReadFile(
+            hFile,
+            pidl,
+            pidlSize,
+            &read,
+            NULL) ||
+            read != pidlSize)
+        {
+            CoTaskMemFree(pidl);
+            break;
+        }
+
+        POINT pt = { 0, 0 };
+
+        if (!ReadFile(
+            hFile,
+            &pt,
+            sizeof(pt),
+            &read,
+            NULL) ||
+            read != sizeof(pt))
+        {
+            CoTaskMemFree(pidl);
+            break;
+        }
+
+        LPCITEMIDLIST item = pidl;
+
+        folderView->SelectAndPositionItems(
+            1,
+            &item,
+            &pt,
+            SVSI_POSITIONITEM |
+            SVSI_NOTAKEFOCUS
+        );
+
+        CoTaskMemFree(pidl);
+    }
+
+    CloseHandle(hFile);
+
+    return S_OK;
+}
+
 
 
 static BOOL CALLBACK SwitchDesktopEnumFct(HWND hwnd, LPARAM lparam)
@@ -300,6 +623,7 @@ HWND DesktopWindow::Create()
 
 #define WM_SHNOTIFY  (WM_USER+0x1)
 #define WM_USERCOMMAND (WM_USER+WM_COMMAND)
+#define WM_DESKTOP_RESTORE_POSITIONS (WM_USER+0x2)
 
 #ifndef _WIN32_WINNT_WIN10
 #define _WIN32_WINNT_WIN10                  0x0A00
@@ -344,11 +668,9 @@ LRESULT DesktopWindow::Init(LPCREATESTRUCT pcs)
         fs.ViewMode = JCFG2_DEF("JS_DESKTOP", "viewmode", FVM_ICON).ToInt();
         fs.fFlags =
             FWF_DESKTOP |
-            FWF_ALIGNLEFT |
             FWF_NOCLIENTEDGE |
             FWF_NOSCROLL |
-            FWF_BESTFITWINDOW |
-            FWF_SNAPTOGRID;
+            FWF_BESTFITWINDOW;
         /* PositionIcons() need remove FWF_SNAPTOGRID flag, but set the flag after the
            view be created need use IFolderView2 interface in windows vista or later. */
         ClientRect rect(_hwnd);
@@ -386,6 +708,13 @@ LRESULT DesktopWindow::Init(LPCREATESTRUCT pcs)
             _pDesktopShellView = new DesktopShellView(hWndView, _pShellView);
 
             _pShellView->UIActivate(SVUIA_ACTIVATE_FOCUS);
+
+            PostMessage(
+                _hwnd,
+                WM_DESKTOP_RESTORE_POSITIONS,
+                0,
+                0
+            );
 
             /*
                 IShellView2* pShellView2;
@@ -723,6 +1052,15 @@ LRESULT DesktopWindow::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
         ProcessUserCommand(wparam, lparam);
         break;
     }
+    case WM_DESKTOP_RESTORE_POSITIONS:
+        if (_pFolderView)
+        {
+            RestoreDesktopPositions(
+                _pFolderView
+            );
+        }
+
+        break;
 default: def:
         return super::WndProc(nmsg, wparam, lparam);
     }
@@ -757,6 +1095,29 @@ DesktopShellView::DesktopShellView(HWND hwnd, IShellView *pShellView)
     // Without this the desktop has mysteriously only a size of 800x600 pixels.
     ClientRect rect(hwnd);
     MoveWindow(_hwndListView, 0, 0, rect.right, rect.bottom, TRUE);
+
+    // Disable ListView automatic icon arrangement.
+    DWORD style = GetWindowStyle(_hwndListView);
+
+    style &= ~LVS_AUTOARRANGE;
+    style &= ~LVS_ALIGNMASK;
+
+    SetWindowLong(
+        _hwndListView,
+        GWL_STYLE,
+        style
+    );
+
+    // Disable snap-to-grid.
+    DWORD extStyle =
+        ListView_GetExtendedListViewStyle(_hwndListView);
+
+    extStyle &= ~LVS_EX_SNAPTOGRID;
+
+    ListView_SetExtendedListViewStyle(
+        _hwndListView,
+        extStyle
+    );
 
     // subclass background window
     //new BackgroundWindow(_hwndListView);
@@ -1161,6 +1522,9 @@ struct DebugDropTarget : public IDropTarget
 
         if (SUCCEEDED(hrPosition))
         {
+            SaveDesktopPositions(
+                _folderView
+            );
             *effect = DROPEFFECT_MOVE;
         }
 
@@ -1537,7 +1901,6 @@ LRESULT DesktopShellView::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
     case WM_MBUTTONDBLCLK:
         /* Imagelist icons are missing if MainFrame::Create() is called directly from here!
         explorer_show_frame(SW_SHOWNORMAL); */
-        PostMessage(g_Globals._hwndDesktop, nmsg, wparam, lparam);
         break;
     default:
         return super::WndProc(nmsg, wparam, lparam);
@@ -1912,12 +2275,6 @@ void DesktopShellView::PositionIcons(int dir)
     /* disable default allignment */
     // SetWindowStyle(_hwndListView, GetWindowStyle(_hwndListView)&~LVS_ALIGNMASK);//|LVS_ALIGNTOP|LVS_AUTOARRANGE);
     /* remove LVS_EX_SNAPTOGRID externded style before call SetItemPosition32 */
-    DWORD ext_style = ListView_GetExtendedListViewStyle(_hwndListView);
-
-    BOOL n = ext_style & LVS_EX_SNAPTOGRID;
-    if ((ext_style & LVS_EX_SNAPTOGRID) == LVS_EX_SNAPTOGRID) {
-        ListView_SetExtendedListViewStyle(_hwndListView, ext_style & ~LVS_EX_SNAPTOGRID);
-    }
 
     int i1, i2;
 
@@ -2005,10 +2362,6 @@ void DesktopShellView::PositionIcons(int dir)
         const IconPos &pos = it->first;
 
         ListView_SetItemPosition32(_hwndListView, it->second, pos.second, pos.first);
-    }
-
-    if ((ext_style & LVS_EX_SNAPTOGRID) == LVS_EX_SNAPTOGRID) {
-        ListView_SetExtendedListViewStyle(_hwndListView, ext_style);
     }
     //ListView_RedrawItems(_hwndListView, 0,all - 1);
     //UpdateWindow(_hwndListView);
