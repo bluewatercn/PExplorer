@@ -342,13 +342,8 @@ LRESULT DesktopWindow::Init(LPCREATESTRUCT pcs)
         FOLDERSETTINGS fs;
         int defaultFlags = 0;
         fs.ViewMode = JCFG2_DEF("JS_DESKTOP", "viewmode", FVM_ICON).ToInt();
-        fs.fFlags =
-            FWF_DESKTOP |
-            FWF_ALIGNLEFT |
-            FWF_NOCLIENTEDGE |
-            FWF_NOSCROLL |
-            FWF_BESTFITWINDOW |
-            FWF_SNAPTOGRID;
+        defaultFlags = FWF_DESKTOP | FWF_ALIGNLEFT | FWF_NOCLIENTEDGE | FWF_NOSCROLL | FWF_BESTFITWINDOW | FWF_SNAPTOGRID; //|FWF_AUTOARRANGE;
+        fs.fFlags = JCFG2_DEF("JS_DESKTOP", "viewflags", defaultFlags).ToInt();
         /* PositionIcons() need remove FWF_SNAPTOGRID flag, but set the flag after the
            view be created need use IFolderView2 interface in windows vista or later. */
         ClientRect rect(_hwnd);
@@ -747,9 +742,7 @@ HRESULT DesktopWindow::OnDefaultCommand(LPIDA pida)
 
 DesktopShellView::DesktopShellView(HWND hwnd, IShellView *pShellView)
     :  super(hwnd),
-       _pShellView(pShellView),
-       _pContextMenu2(NULL),
-       _pContextMenu3(NULL)
+       _pShellView(pShellView)
 {
     _hwndListView = GetNextWindow(hwnd, GW_CHILD);
     ShowWindow(_hwndListView, SW_HIDE);
@@ -782,16 +775,6 @@ DesktopShellView::DesktopShellView(HWND hwnd, IShellView *pShellView)
 
 DesktopShellView::~DesktopShellView()
 {
-    if (_pContextMenu3) {
-        _pContextMenu3->Release();
-        _pContextMenu3 = NULL;
-    }
-
-    if (_pContextMenu2) {
-        _pContextMenu2->Release();
-        _pContextMenu2 = NULL;
-    }
-
     if (_hbmWallp) {
         DeleteObject(_hbmWallp);
         _hbmWallp = NULL;
@@ -803,241 +786,17 @@ DesktopShellView::~DesktopShellView()
     }
 }
 
-struct DebugDropTarget : public IDropTarget
-{
-    LONG _ref;
-    IDropTarget* _inner;
-    IFolderView2* _folderView;
-    IShellView2* _shellView2;
-    HWND _hwndListView;
-
-    DebugDropTarget(
-        IDropTarget* inner,
-        IShellView* shellView,
-        HWND hwndListView)
-        : _ref(1),
-        _inner(inner),
-        _folderView(NULL),
-        _shellView2(NULL),
-        _hwndListView(hwndListView)
-    {
-        _inner->AddRef();
-
-        shellView->QueryInterface(
-            IID_IFolderView2,
-            (void**)&_folderView
-        );
-
-        shellView->QueryInterface(
-            IID_IShellView2,
-            (void**)&_shellView2
-        );
-    }
-
-    ~DebugDropTarget()
-    {
-        if (_folderView)
-            _folderView->Release();
-
-        if (_shellView2)
-            _shellView2->Release();
-
-        if (_inner)
-            _inner->Release();
-    }
-
-    HRESULT STDMETHODCALLTYPE QueryInterface(
-        REFIID riid,
-        void** ppv) override
-    {
-        if (!ppv)
-            return E_POINTER;
-
-        *ppv = NULL;
-
-        if (riid == IID_IUnknown ||
-            riid == IID_IDropTarget)
-        {
-            *ppv = static_cast<IDropTarget*>(this);
-            AddRef();
-            return S_OK;
-        }
-
-        return E_NOINTERFACE;
-    }
-
-    ULONG STDMETHODCALLTYPE AddRef() override
-    {
-        return InterlockedIncrement(&_ref);
-    }
-
-    ULONG STDMETHODCALLTYPE Release() override
-    {
-        ULONG ref = InterlockedDecrement(&_ref);
-
-        if (!ref)
-            delete this;
-
-        return ref;
-    }
-
-    HRESULT STDMETHODCALLTYPE DragEnter(
-        IDataObject* data,
-        DWORD key,
-        POINTL pt,
-        DWORD* effect) override
-    {
-        return _inner->DragEnter(
-            data,
-            key,
-            pt,
-            effect
-        );
-    }
-
-    HRESULT STDMETHODCALLTYPE DragOver(
-        DWORD key,
-        POINTL pt,
-        DWORD* effect) override
-    {
-        return _inner->DragOver(
-            key,
-            pt,
-            effect
-        );
-    }
-
-    HRESULT STDMETHODCALLTYPE DragLeave() override
-    {
-        return _inner->DragLeave();
-    }
-
-    HRESULT STDMETHODCALLTYPE Drop(
-        IDataObject* data,
-        DWORD key,
-        POINTL pt,
-        DWORD* effect) override
-    {
-        if (!effect)
-            return E_POINTER;
-
-        /*
-         * Save the requested effect before calling the original
-         * ShellView Drop(), because it may change *effect to 0.
-         */
-        DWORD requestedEffect = *effect;
-
-        int index = -1;
-        PITEMID_CHILD pidl = NULL;
-
-        if (_hwndListView)
-        {
-            index = ListView_GetNextItem(
-                _hwndListView,
-                -1,
-                LVNI_SELECTED
-            );
-        }
-
-        /*
-         * Get the selected item's PIDL before calling the original
-         * Drop(), because the selection may change during Drop().
-         */
-        if (index >= 0 && _folderView)
-        {
-            _folderView->Item(
-                index,
-                &pidl
-            );
-        }
-
-        /*
-         * Let the original ShellView handle the Drop first.
-         *
-         * For an ordinary external drop this is the complete operation.
-         * For a same-folder desktop move, Windows currently returns
-         * S_OK but does not reposition the icon.
-         */
-        HRESULT hrDrop = _inner->Drop(
-            data,
-            key,
-            pt,
-            effect
-        );
-
-        /*
-         * Same-folder desktop icon move.
-         *
-         * We already verified that Windows reports this through
-         * IFolderView2::IsMoveInSameFolder(), and that
-         * IShellView2::SelectAndPositionItem() successfully moves
-         * the icon.
-         */
-        if (pidl &&
-            _folderView &&
-            _shellView2 &&
-            SUCCEEDED(_folderView->IsMoveInSameFolder()) &&
-            (requestedEffect & DROPEFFECT_MOVE))
-        {
-            POINT position = {
-                pt.x,
-                pt.y
-            };
-
-            HRESULT hrPosition =
-                _shellView2->SelectAndPositionItem(
-                    pidl,
-                    SVSI_POSITIONITEM |
-                    SVSI_SELECT |
-                    SVSI_NOTAKEFOCUS |
-                    SVSI_TRANSLATEPT,
-                    &position
-                );
-
-            if (SUCCEEDED(hrPosition))
-            {
-                *effect = DROPEFFECT_MOVE;
-            }
-        }
-
-        if (pidl)
-            CoTaskMemFree(pidl);
-
-        return hrDrop;
-    }
-};
 
 bool DesktopShellView::InitDragDrop()
 {
-    IDropTarget* dt = NULL;
-
-    HRESULT hr = _pShellView->QueryInterface(
-        IID_IDropTarget,
-        (void**)&dt
-    );
-
+    CONTEXT("DesktopShellView::InitDragDrop()");
+    IDropTarget *dt;
+    HRESULT hr = _pShellView->QueryInterface(IID_IDropTarget, (void **)&dt);
     if (SUCCEEDED(hr)) {
-        DebugDropTarget* debugTarget =
-            new DebugDropTarget(
-                dt,
-                _pShellView,
-                _hwndListView
-            );
-
-        dt->Release();
-
-        RevokeDragDrop(_hwndListView);
-
-        hr = RegisterDragDrop(
-            _hwndListView,
-            debugTarget
-        );
-
-        debugTarget->Release();
-
-        return SUCCEEDED(hr);
+        RevokeDragDrop(_hwndListView); // just in case
+        RegisterDragDrop(_hwndListView, dt);
+        return true;
     }
-
     return false;
 }
 
@@ -1272,34 +1031,6 @@ static BOOL UpdateWallpaper()
 LRESULT DesktopShellView::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
 {
     switch (nmsg) {
-    case WM_DRAWITEM:
-    case WM_MEASUREITEM:
-    case WM_INITMENUPOPUP:
-        if (!wparam || nmsg == WM_INITMENUPOPUP) {
-            LRESULT result = 0;
-
-            if (_pContextMenu3) {
-                if (SUCCEEDED(_pContextMenu3->HandleMenuMsg2(
-                    nmsg, wparam, lparam, &result)))
-                    return result;
-            }
-            else if (_pContextMenu2) {
-                if (SUCCEEDED(_pContextMenu2->HandleMenuMsg(
-                    nmsg, wparam, lparam)))
-                    return 0;
-            }
-        }
-        break;
-
-    case WM_MENUCHAR:
-        if (_pContextMenu3) {
-            LRESULT result = 0;
-
-            if (SUCCEEDED(_pContextMenu3->HandleMenuMsg2(
-                nmsg, wparam, lparam, &result)))
-                return result;
-        }
-        break;
     case WM_TIMER: {
         UINT tid = (UINT)wparam;
         if (tid == ID_TIMER_ADJUST_ICONPOSITION) {
@@ -1509,7 +1240,74 @@ HRESULT CreateDefaultContextMenu(HWND hwnd, IContextMenu **ppcm, HKEY *aKeys, UI
     return SHCreateDefaultContextMenu(&dcm, IID_IContextMenu, (void **)ppcm);
 }
 
+HMENU DesktopShellView::GetShellViewContextMenu()
+{
+    CtxMenuInterfaces *pcm_ifs = _pcmMap[TEXT("SV")];
+    IContextMenu *pcm = NULL;
+    HMENU hmenu = CreatePopupMenu();
+    if (!hmenu) {
+        return NULL;
+    }
 
+    HRESULT hr = -1;
+    String cm = JCFG2_DEF("JS_DESKTOP", "ContextMenu", TEXT("")).ToString();
+    if (cm.empty()) {
+        hr = _pShellView->GetItemObject(SVGIO_BACKGROUND, IID_IContextMenu, (LPVOID *)&pcm);
+    } else if (cm == TEXT("view")) {
+        hr = _pShellView->GetItemObject(SVGIO_FLAG_VIEWORDER, IID_IContextMenu, (LPVOID *)&pcm);
+    } else if (cm == TEXT("basic")) {
+        hr = DesktopFolder()->CreateViewObject(_hwnd, IID_IContextMenu, (LPVOID *)&pcm);
+    } else if (cm == TEXT("origin")) {
+        hr = DesktopFolder()->GetUIObjectOf(_hwnd, 0, NULL, IID_IContextMenu, NULL, (LPVOID*)&pcm);
+    }
+    if (cm == TEXT("none") || FAILED(hr)) {
+        DestroyMenu(hmenu);
+        return NULL;
+    }
+    pcm = pcm_ifs->query_interfaces(pcm);
+    hr = pcm->QueryContextMenu(hmenu, 0, FCIDM_SHVIEWFIRST, FCIDM_SHVIEWLAST - 1, CMF_NORMAL | CMF_EXTENDEDVERBS);
+    if (FAILED(hr)) {
+        pcm_ifs->reset();
+        pcm->Release();
+        DestroyMenu(hmenu);
+        return NULL;
+    }
+    return hmenu;
+}
+
+HMENU DesktopShellView::GetWinXNewContextMenu()
+{
+    HKEY hKeys[16];
+    UINT cKeys = 0;
+    CtxMenuInterfaces *pcm_ifs = _pcmMap[TEXT("New")];
+    IContextMenu *pcm = NULL;
+
+    String menukey = JCFG3_DEF("JS_DESKTOP", "cascademenu", "WinXNew", TEXT("")).ToString();
+    if (menukey == TEXT("")) {
+        return NULL;
+    }
+
+    HMENU hmenu = CreatePopupMenu();
+    if (!hmenu) {
+        return NULL;
+    }
+
+    AddClassKeyToArray(menukey.c_str(), hKeys, &cKeys);
+    HRESULT hr = CreateDefaultContextMenu(_hwnd, &pcm, hKeys, cKeys);
+    if (FAILED(hr)) {
+        DestroyMenu(hmenu);
+        return NULL;
+    }
+    pcm = pcm_ifs->query_interfaces(pcm);
+    hr = pcm->QueryContextMenu(hmenu, 0, FCIDM_SHVIEWFIRST, FCIDM_SHVIEWLAST - 1, CMF_NORMAL | CMF_ITEMMENU | CMF_ASYNCVERBSTATE | CMF_SYNCCASCADEMENU);
+    if (FAILED(hr)) {
+        pcm_ifs->reset();
+        pcm->Release();
+        DestroyMenu(hmenu);
+        return NULL;
+    }
+    return hmenu;
+}
 
 void PrintMenuInfo(HMENU hmenu, IContextMenu *pcm, const TCHAR *space)
 {
@@ -1578,86 +1376,62 @@ void SetSubMenuMap(HMENU hmenu, CtxMenuInterfaces *pcm_ifs, map<HMENU, CtxMenuIn
 
 HRESULT DesktopShellView::DoDesktopContextMenu(int x, int y)
 {
-    IContextMenu* pcm = NULL;
+    CtxMenuInterfaces cmSV_ifs;
+    CtxMenuInterfaces cmNew_ifs;
 
-    HMENU hmenu = CreatePopupMenu();
-    if (!hmenu)
-        return E_OUTOFMEMORY;
-
-    HRESULT hr = _pShellView->GetItemObject(
-        SVGIO_BACKGROUND,
-        IID_IContextMenu,
-        (LPVOID*)&pcm
-    );
-
-    if (FAILED(hr)) {
-        DestroyMenu(hmenu);
-        return hr;
+    _pcmMap[TEXT("SV")] = &cmSV_ifs;
+    _pcmMap[TEXT("New")] = &cmNew_ifs;
+    HMENU hmenu = NULL, hmenuSV = NULL, hmenuNew = NULL;
+    
+    hmenuSV = GetShellViewContextMenu();
+    if (!hmenuSV) {
+        return S_FALSE;
     }
+    _cm_ifs = cmSV_ifs;
 
-    hr = pcm->QueryInterface(
-        IID_IContextMenu3,
-        (void**)&_pContextMenu3
-    );
+#if _DEBUG
+    _log_(TEXT("SV"));
+    PrintMenuInfo(hmenuSV, cmSV_ifs._pctxmenu, L"");
+#endif
 
-    if (FAILED(hr)) {
-        hr = pcm->QueryInterface(
-            IID_IContextMenu2,
-            (void**)&_pContextMenu2
-        );
-    }
-
-    UINT flags = CMF_NORMAL;
-
-    if (GetKeyState(VK_SHIFT) < 0)
-        flags |= CMF_EXTENDEDVERBS;
-
-    hr = pcm->QueryContextMenu(
-        hmenu,
-        0,
-        FCIDM_SHVIEWFIRST,
-        FCIDM_SHVIEWLAST - 1,
-        flags
-    );
-
-    if (FAILED(hr)) {
-        pcm->Release();
-        DestroyMenu(hmenu);
-        return hr;
-    }
+    hmenu = hmenuSV;
 
     SetMenuCursorPos(x, y);
+    SetMenuDefaultItem(hmenu, -1, FALSE);
+    if (GetKeyState(VK_SHIFT) < 0) {
+        AppendMenu(hmenu, MF_SEPARATOR, 0, NULL);
+        AppendMenu(hmenu, 0, FCIDM_SHVIEWLAST - 1, ResString(IDS_ABOUT_EXPLORER));
+    }
+    UINT idCmd = TrackPopupMenu(hmenu, TPM_LEFTALIGN | TPM_RETURNCMD | TPM_RIGHTBUTTON, x, y, 0, _hwnd, NULL);
 
-    UINT idCmd = TrackPopupMenu(
-        hmenu,
-        TPM_LEFTALIGN | TPM_RETURNCMD | TPM_RIGHTBUTTON,
-        x,
-        y,
-        0,
-        _hwnd,
-        NULL
-    );
-
-    if (idCmd)
+    if (idCmd == FCIDM_SHVIEWLAST - 1) {
+        SetMenuCursorPos(-1, -1);
+        explorer_about(_hwnd);
+    } else if (idCmd) {
+        IContextMenu *pcm = _cm_ifs._pctxmenu;
+        String menuname;
+        WCHAR namebuffer[MAX_PATH + 1] = { 0 };
+        if (idCmd >= FCIDM_WINXNEW) {
+            pcm = cmNew_ifs._pctxmenu;
+            idCmd -= FCIDM_WINXNEW;
+        }
         DoInvokeCommand(_hwnd, pcm, idCmd);
-
-    SetMenuCursorPos(-1, -1);
-
-    if (_pContextMenu3) {
-        _pContextMenu3->Release();
-        _pContextMenu3 = NULL;
+        if (pcm != cmNew_ifs._pctxmenu) {
+            SetMenuCursorPos(-1, -1);
+        }
     }
 
-    if (_pContextMenu2) {
-        _pContextMenu2->Release();
-        _pContextMenu2 = NULL;
-    }
+    _pcmMap.clear();
+    _pcmMenuMap.clear();
+    _cm_ifs._pctxmenu->Release();
+    if (cmNew_ifs._pctxmenu) cmNew_ifs._pctxmenu->Release();
 
-    pcm->Release();
     DestroyMenu(hmenu);
+    if (hmenuNew) DestroyMenu(hmenuNew);
 
     return S_OK;
 }
+
 
 #define ARRANGE_BORDER_DOWN  8
 #define ARRANGE_BORDER_HV    9

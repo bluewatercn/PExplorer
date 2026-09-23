@@ -73,8 +73,6 @@ typedef struct DesktopShellView : public ExtMultiContextMenuHandlerT<SubclassedW
     void    SetMenuCursorPos(LONG x, LONG y);
 protected:
     IShellView *_pShellView;
-    IContextMenu2* _pContextMenu2;
-    IContextMenu3* _pContextMenu3;
 
     LRESULT WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam);
     int     Command(int id, int code);
@@ -88,7 +86,8 @@ protected:
     void    DrawDesktopBkgnd(HDC hdc);
     HRESULT DoDesktopContextMenu(int x, int y);
     void    PositionIcons(int dir = 1);
-
+    HMENU   GetShellViewContextMenu();
+    HMENU   GetWinXNewContextMenu();
 
     HWND    _hwndListView;
     int     _icon_algo;
