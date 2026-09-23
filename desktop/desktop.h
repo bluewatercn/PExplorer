@@ -62,45 +62,69 @@ protected:
 };
 */
 
-/// subclassed ShellView window
-typedef struct DesktopShellView : public ExtMultiContextMenuHandlerT<SubclassedWindow> {
+struct DebugDropTarget;
+
+typedef struct DesktopShellView :
+    public ExtMultiContextMenuHandlerT<SubclassedWindow>
+{
     typedef ExtMultiContextMenuHandlerT<SubclassedWindow> super;
 
-    DesktopShellView(HWND hwnd, IShellView *pShellView);
+    DesktopShellView(HWND hwnd, IShellView* pShellView);
     ~DesktopShellView();
 
-    POINT   GetMenuCursorPos();
-    void    SetMenuCursorPos(LONG x, LONG y);
-protected:
-    IShellView *_pShellView;
+    POINT GetMenuCursorPos();
+    void SetMenuCursorPos(LONG x, LONG y);
 
-    LRESULT WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam);
-    int     Command(int id, int code);
-    int     Notify(int id, NMHDR *pnmh);
-    bool    InitDragDrop();
-    void    Refresh();
-    bool    DoContextMenu(int x, int y);
-    HBITMAP SHLoadDIBitmap(LPCTSTR szFileName, int *pnWidth, int *pnHeight);
+protected:
+    IShellView* _pShellView;
+
+    LRESULT WndProc(
+        UINT nmsg,
+        WPARAM wparam,
+        LPARAM lparam);
+
+    int Command(int id, int code);
+    int Notify(int id, NMHDR* pnmh);
+
+    bool InitDragDrop();
+
+    static LRESULT CALLBACK ListViewProc(
+        HWND hwnd,
+        UINT msg,
+        WPARAM wparam,
+        LPARAM lparam);
+
+    DebugDropTarget* _debugDropTarget;
+    WNDPROC _oldListViewProc;
+
+    // 下面保持你原来的内容
+    void Refresh();
+    bool DoContextMenu(int x, int y);
+    HBITMAP SHLoadDIBitmap(
+        LPCTSTR szFileName,
+        int* pnWidth,
+        int* pnHeight);
+
     LRESULT LoadWallpaper(BOOL fInitial);
     HBITMAP StretchWallpaper();
-    void    DrawDesktopBkgnd(HDC hdc);
+    void DrawDesktopBkgnd(HDC hdc);
     HRESULT DoDesktopContextMenu(int x, int y);
-    void    PositionIcons(int dir = 1);
-    HMENU   GetShellViewContextMenu();
-    HMENU   GetWinXNewContextMenu();
+    void PositionIcons(int dir = 1);
+    HMENU GetShellViewContextMenu();
+    HMENU GetWinXNewContextMenu();
 
-    HWND    _hwndListView;
-    int     _icon_algo;
-    POINT   _menu_pt;
-    DWORD   _fStyleWallp;
+    HWND _hwndListView;
+    int _icon_algo;
+    POINT _menu_pt;
+    DWORD _fStyleWallp;
     HBITMAP _hbmWallp;
-    HBRUSH  _hbrWallp;
-    RECT     _work_area;
-    RECT    _rcWp;
-    RECT    _rcBitmapWp;
-    TCHAR   _szBMPName[MAX_PATH + 1];
-}DesktopShellView, *PDesktopShellView;
+    HBRUSH _hbrWallp;
+    RECT _work_area;
+    RECT _rcWp;
+    RECT _rcBitmapWp;
+    TCHAR _szBMPName[MAX_PATH + 1];
 
+} DesktopShellView, * PDesktopShellView;
 
 /// Implementation of the Explorer desktop window
 struct DesktopWindow : public PreTranslateWindow, public IShellBrowserImpl {

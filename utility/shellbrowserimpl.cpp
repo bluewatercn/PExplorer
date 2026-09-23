@@ -115,3 +115,19 @@ HRESULT IShellBrowserImpl::OnDefaultCommand(IShellView *ppshv)
 
     return hr;
 }
+
+HRESULT IShellBrowserImpl::GetViewStateStream(
+    DWORD grfMode,
+    LPSTREAM* ppStrm)
+{
+    if (!ppStrm)
+        return E_POINTER;
+
+    *ppStrm = NULL;
+
+    return CreateStreamOnHGlobal(
+        NULL,
+        TRUE,
+        ppStrm
+    );
+}

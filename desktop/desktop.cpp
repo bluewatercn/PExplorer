@@ -740,11 +740,35 @@ HRESULT DesktopWindow::OnDefaultCommand(LPIDA pida)
 #define ICON_ALGORITHM_DEF 0
 #define ID_TIMER_ADJUST_ICONPOSITION 815
 
-DesktopShellView::DesktopShellView(HWND hwnd, IShellView *pShellView)
-    :  super(hwnd),
-       _pShellView(pShellView)
+DesktopShellView::DesktopShellView(
+    HWND hwnd,
+    IShellView* pShellView)
+    : super(hwnd),
+    _pShellView(pShellView),
+    _debugDropTarget(NULL),
+    _oldListViewProc(NULL)
 {
     _hwndListView = GetNextWindow(hwnd, GW_CHILD);
+
+    /*
+     * _hwndListView 就是真正的 SysListView32。
+     *
+     * 保存 DesktopShellView 指针，
+     * 然后 subclass ListView。
+     */
+    SetWindowLongPtr(
+        _hwndListView,
+        GWLP_USERDATA,
+        (LONG_PTR)this
+    );
+
+    _oldListViewProc =
+        (WNDPROC)SetWindowLongPtr(
+            _hwndListView,
+            GWLP_WNDPROC,
+            (LONG_PTR)DesktopShellView::ListViewProc
+        );
+
     ShowWindow(_hwndListView, SW_HIDE);
     // work around for Windows NT, Win 98, ...
     // Without this the desktop has mysteriously only a size of 800x600 pixels.
@@ -775,31 +799,621 @@ DesktopShellView::DesktopShellView(HWND hwnd, IShellView *pShellView)
 
 DesktopShellView::~DesktopShellView()
 {
-    if (_hbmWallp) {
-        DeleteObject(_hbmWallp);
+    /*
+     * 1. 先解除 OLE Drag & Drop 注册。
+     */
+    if (_hwndListView)
+    {
+        RevokeDragDrop(
+            _hwndListView
+        );
+    }
+
+
+    /*
+     * 2. 恢复 SysListView32
+     *    原来的 WndProc。
+     */
+    if (_hwndListView &&
+        _oldListViewProc)
+    {
+        SetWindowLongPtr(
+            _hwndListView,
+            GWLP_WNDPROC,
+            (LONG_PTR)_oldListViewProc
+        );
+
+        SetWindowLongPtr(
+            _hwndListView,
+            GWLP_USERDATA,
+            0
+        );
+
+        _oldListViewProc = NULL;
+    }
+
+
+    /*
+     * 3. 壁纸。
+     */
+    if (_hbmWallp)
+    {
+        DeleteObject(
+            _hbmWallp
+        );
+
         _hbmWallp = NULL;
     }
 
-    if (_hbrWallp) {
-        DeleteObject(_hbrWallp);
+
+    if (_hbrWallp)
+    {
+        DeleteObject(
+            _hbrWallp
+        );
+
         _hbrWallp = NULL;
     }
 }
 
+struct DebugDropTarget : public IDropTarget
+{
+    LONG _ref;
+
+    IDropTarget* _inner;
+    IFolderView2* _folderView;
+
+    HWND _hwndListView;
+
+    POINT _grabOffset;
+    bool _haveGrabOffset;
+
+
+    DebugDropTarget(
+        IDropTarget* inner,
+        IShellView* shellView,
+        HWND hwndListView)
+        : _ref(1),
+        _inner(inner),
+        _folderView(NULL),
+        _hwndListView(hwndListView),
+        _grabOffset(),
+        _haveGrabOffset(false)
+    {
+        if (_inner)
+            _inner->AddRef();
+
+        if (shellView)
+        {
+            shellView->QueryInterface(
+                IID_IFolderView2,
+                (void**)&_folderView
+            );
+        }
+    }
+
+
+    ~DebugDropTarget()
+    {
+        if (_folderView)
+        {
+            _folderView->Release();
+            _folderView = NULL;
+        }
+
+        if (_inner)
+        {
+            _inner->Release();
+            _inner = NULL;
+        }
+    }
+
+
+    /*
+     * 保存鼠标按下时：
+     *
+     * 鼠标位置 - 图标位置
+     *
+     * 得到的相对偏移。
+     */
+    void SetGrabOffset(
+        LONG x,
+        LONG y)
+    {
+        _grabOffset.x = x;
+        _grabOffset.y = y;
+
+        _haveGrabOffset = true;
+    }
+
+
+    void ClearGrabOffset()
+    {
+        _grabOffset.x = 0;
+        _grabOffset.y = 0;
+
+        _haveGrabOffset = false;
+    }
+
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(
+        REFIID riid,
+        void** ppv) override
+    {
+        if (!ppv)
+            return E_POINTER;
+
+        *ppv = NULL;
+
+        if (riid == IID_IUnknown ||
+            riid == IID_IDropTarget)
+        {
+            *ppv =
+                static_cast<IDropTarget*>(this);
+
+            AddRef();
+
+            return S_OK;
+        }
+
+        return E_NOINTERFACE;
+    }
+
+
+    ULONG STDMETHODCALLTYPE AddRef() override
+    {
+        return InterlockedIncrement(
+            &_ref
+        );
+    }
+
+
+    ULONG STDMETHODCALLTYPE Release() override
+    {
+        ULONG ref =
+            InterlockedDecrement(
+                &_ref
+            );
+
+        if (!ref)
+            delete this;
+
+        return ref;
+    }
+
+
+    HRESULT STDMETHODCALLTYPE DragEnter(
+        IDataObject* data,
+        DWORD key,
+        POINTL pt,
+        DWORD* effect) override
+    {
+        if (!_inner)
+            return E_FAIL;
+
+        return _inner->DragEnter(
+            data,
+            key,
+            pt,
+            effect
+        );
+    }
+
+
+    HRESULT STDMETHODCALLTYPE DragOver(
+        DWORD key,
+        POINTL pt,
+        DWORD* effect) override
+    {
+        if (!_inner)
+            return E_FAIL;
+
+        return _inner->DragOver(
+            key,
+            pt,
+            effect
+        );
+    }
+
+
+    HRESULT STDMETHODCALLTYPE DragLeave() override
+    {
+        if (!_inner)
+            return E_FAIL;
+
+        return _inner->DragLeave();
+    }
+
+
+    HRESULT STDMETHODCALLTYPE Drop(
+        IDataObject* data,
+        DWORD key,
+        POINTL pt,
+        DWORD* effect) override
+    {
+        if (!effect)
+            return E_POINTER;
+
+        if (!_inner)
+            return E_FAIL;
+
+
+        /*
+         * 1.
+         *
+         * 先让 Windows Shell
+         * 按照原生方式执行 Drop。
+         */
+        HRESULT hrDrop =
+            _inner->Drop(
+                data,
+                key,
+                pt,
+                effect
+            );
+
+
+        /*
+         * Shell Drop 失败，
+         * 我们什么都不再做。
+         */
+        if (FAILED(hrDrop))
+            return hrDrop;
+
+
+        /*
+         * 没有 IFolderView2，
+         * 无法进行最终位置修正。
+         */
+        if (!_folderView)
+            return hrDrop;
+
+
+        /*
+         * 2.
+         *
+         * 找到当前被选中的图标。
+         *
+         * 这里暂时仍然只处理单个图标。
+         */
+        int index =
+            ListView_GetNextItem(
+                _hwndListView,
+                -1,
+                LVNI_SELECTED
+            );
+
+
+        if (index < 0)
+            return hrDrop;
+
+
+        /*
+         * 3.
+         *
+         * 获取当前图标 PIDL。
+         */
+        PITEMID_CHILD child = NULL;
+
+        HRESULT hr =
+            _folderView->Item(
+                index,
+                &child
+            );
+
+
+        if (FAILED(hr) ||
+            !child)
+        {
+            return hrDrop;
+        }
+
+
+        /*
+         * 4.
+         *
+         * Drop 的 POINTL 是屏幕坐标。
+         *
+         * 转换成 SysListView32
+         * 的 client 坐标。
+         */
+        POINT position;
+
+        position.x = pt.x;
+        position.y = pt.y;
+
+        ScreenToClient(
+            _hwndListView,
+            &position
+        );
+
+
+        /*
+         * 5.
+         *
+         * 减去鼠标抓取图标时的偏移。
+         *
+         * 例如：
+         *
+         * 鼠标抓在图标中心：
+         *
+         * grabOffset =
+         *     (图标中心 - 图标左上角)
+         *
+         * Drop 时：
+         *
+         * 图标左上角 =
+         *     鼠标位置 - grabOffset
+         */
+        if (_haveGrabOffset)
+        {
+            position.x -=
+                _grabOffset.x;
+
+            position.y -=
+                _grabOffset.y;
+        }
+
+
+        /*
+         * 6.
+         *
+         * 让 Shell 设置图标最终位置。
+         */
+        LPCITEMIDLIST pidl = child;
+
+        HRESULT hrPosition =
+            _folderView->SelectAndPositionItems(
+                1,
+                &pidl,
+                &position,
+                SVSI_POSITIONITEM |
+                SVSI_SELECT |
+                SVSI_NOTAKEFOCUS
+            );
+
+
+        /*
+         * 7.
+         *
+         * 测试阶段可以看到最终坐标。
+         */
+        TCHAR buf[1024];
+
+        wsprintf(
+            buf,
+            TEXT("Native Shell Drop\r\n")
+            TEXT("====================\r\n\r\n")
+
+            TEXT("Drop screen:\r\n")
+            TEXT("x = %ld\r\n")
+            TEXT("y = %ld\r\n\r\n")
+
+            TEXT("ListView client:\r\n")
+            TEXT("x = %ld\r\n")
+            TEXT("y = %ld\r\n\r\n")
+
+            TEXT("Grab offset:\r\n")
+            TEXT("x = %ld\r\n")
+            TEXT("y = %ld\r\n\r\n")
+
+            TEXT("Final Shell position:\r\n")
+            TEXT("x = %ld\r\n")
+            TEXT("y = %ld\r\n\r\n")
+
+            TEXT("SelectAndPositionItems:\r\n")
+            TEXT("hr = 0x%08X"),
+
+            pt.x,
+            pt.y,
+
+            position.x,
+            position.y,
+
+            _grabOffset.x,
+            _grabOffset.y,
+
+            position.x,
+            position.y,
+
+            hrPosition
+        );
+
+/*
+        MessageBox(
+            _hwndListView,
+            buf,
+            TEXT("DEBUG"),
+            MB_OK
+        );
+*/
+
+        /*
+         * 8.
+         *
+         * 释放 Shell 返回的 PIDL。
+         */
+        CoTaskMemFree(child);
+
+
+        /*
+         * 9.
+         *
+         * 返回原生 Shell Drop 的结果，
+         * 而不是把我们的定位结果
+         * 当成 Drop 本身的结果。
+         */
+        return hrDrop;
+    }
+};
+
+LRESULT CALLBACK DesktopShellView::ListViewProc(
+    HWND hwnd,
+    UINT msg,
+    WPARAM wparam,
+    LPARAM lparam)
+{
+    DesktopShellView* desktop =
+        (DesktopShellView*)GetWindowLongPtr(
+            hwnd,
+            GWLP_USERDATA
+        );
+
+    /*
+     * 只处理真正的 SysListView32
+     * 鼠标按下。
+     */
+    if (desktop &&
+        msg == WM_LBUTTONDOWN)
+    {
+        POINT mouse;
+
+        mouse.x =
+            GET_X_LPARAM(lparam);
+
+        mouse.y =
+            GET_Y_LPARAM(lparam);
+
+        /*
+         * 找鼠标下面的图标。
+         */
+        int index =
+            ListView_HitTest(
+                hwnd,
+                &mouse
+            );
+
+        if (index >= 0 &&
+            desktop->_debugDropTarget)
+        {
+            IFolderView2* folderView = NULL;
+
+            HRESULT hr =
+                desktop->_pShellView->QueryInterface(
+                    IID_IFolderView2,
+                    (void**)&folderView
+                );
+
+            if (SUCCEEDED(hr) &&
+                folderView)
+            {
+                PITEMID_CHILD child = NULL;
+
+                hr =
+                    folderView->Item(
+                        index,
+                        &child
+                    );
+
+                if (SUCCEEDED(hr) &&
+                    child)
+                {
+                    POINT shellPosition = {
+                        0,
+                        0
+                    };
+
+                    hr =
+                        folderView->GetItemPosition(
+                            child,
+                            &shellPosition
+                        );
+
+                    if (SUCCEEDED(hr))
+                    {
+                        LONG grabX =
+                            mouse.x -
+                            shellPosition.x;
+
+                        LONG grabY =
+                            mouse.y -
+                            shellPosition.y;
+
+                        desktop->_debugDropTarget
+                            ->SetGrabOffset(
+                                grabX,
+                                grabY
+                            );
+                    }
+
+                    CoTaskMemFree(child);
+                }
+
+                folderView->Release();
+            }
+        }
+    }
+    /*
+     * 非常重要：
+     *
+     * 处理完我们自己的 WM_LBUTTONDOWN
+     * 后，必须继续交给原来的
+     * SysListView32 WndProc。
+     */
+    if (desktop &&
+        desktop->_oldListViewProc)
+    {
+        return CallWindowProc(
+            desktop->_oldListViewProc,
+            hwnd,
+            msg,
+            wparam,
+            lparam
+        );
+    }
+
+    return DefWindowProc(
+        hwnd,
+        msg,
+        wparam,
+        lparam
+    );
+}
 
 bool DesktopShellView::InitDragDrop()
 {
     CONTEXT("DesktopShellView::InitDragDrop()");
-    IDropTarget *dt;
-    HRESULT hr = _pShellView->QueryInterface(IID_IDropTarget, (void **)&dt);
-    if (SUCCEEDED(hr)) {
-        RevokeDragDrop(_hwndListView); // just in case
-        RegisterDragDrop(_hwndListView, dt);
-        return true;
-    }
-    return false;
-}
 
+    IDropTarget* dt = NULL;
+
+    HRESULT hr =
+        _pShellView->QueryInterface(
+            IID_IDropTarget,
+            (void**)&dt
+        );
+
+    if (FAILED(hr))
+        return false;
+
+    RevokeDragDrop(_hwndListView);
+
+    _debugDropTarget =
+        new DebugDropTarget(
+            dt,
+            _pShellView,
+            _hwndListView
+        );
+
+    dt->Release();
+
+    if (!_debugDropTarget)
+        return false;
+
+    hr =
+        RegisterDragDrop(
+            _hwndListView,
+            _debugDropTarget
+        );
+
+    if (FAILED(hr))
+    {
+        _debugDropTarget->Release();
+        _debugDropTarget = NULL;
+        return false;
+    }
+
+    return true;
+}
 
 void DesktopShellView::Refresh()
 {
@@ -1109,6 +1723,7 @@ LRESULT DesktopShellView::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
         explorer_show_frame(SW_SHOWNORMAL); */
         PostMessage(g_Globals._hwndDesktop, nmsg, wparam, lparam);
         break;
+
     default:
         return super::WndProc(nmsg, wparam, lparam);
     }

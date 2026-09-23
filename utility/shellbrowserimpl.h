@@ -75,7 +75,7 @@ struct IShellBrowserImpl
     virtual HRESULT STDMETHODCALLTYPE SetStatusTextSB(LPCOLESTR lpszStatusText) {return E_NOTIMPL;}
     virtual HRESULT STDMETHODCALLTYPE EnableModelessSB(BOOL fEnable) {return E_NOTIMPL;}
     virtual HRESULT STDMETHODCALLTYPE BrowseObject(LPCITEMIDLIST pidl, UINT wFlags) {return E_NOTIMPL;}
-    virtual HRESULT STDMETHODCALLTYPE GetViewStateStream(DWORD grfMode, LPSTREAM *ppStrm) {return E_NOTIMPL;}
+    virtual HRESULT STDMETHODCALLTYPE GetViewStateStream(DWORD grfMode, LPSTREAM* ppStrm);
     virtual HRESULT STDMETHODCALLTYPE OnViewWindowActive(IShellView *ppshv) {return E_NOTIMPL;}
     virtual HRESULT STDMETHODCALLTYPE SetToolbarItems(LPTBBUTTON lpButtons, UINT nButtons, UINT uFlags) {return E_NOTIMPL;}
     virtual HRESULT STDMETHODCALLTYPE TranslateAcceleratorSB(LPMSG lpmsg, WORD wID) {return S_OK;}
