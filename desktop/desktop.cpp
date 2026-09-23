@@ -868,6 +868,24 @@ struct DebugDropTarget : public IDropTarget
     POINT _grabOffset;
     bool _haveGrabOffset;
 
+    struct DragItem
+    {
+        PITEMID_CHILD pidl;
+        POINT position;
+
+        DragItem()
+            : pidl(NULL)
+        {
+            position.x = 0;
+            position.y = 0;
+        }
+    };
+
+    vector<DragItem> _dragItems;
+
+    PITEMID_CHILD _anchorPidl;
+    POINT _anchorPosition;
+    bool _haveDragItems;
 
     DebugDropTarget(
         IDropTarget* inner,
@@ -878,7 +896,10 @@ struct DebugDropTarget : public IDropTarget
         _folderView(NULL),
         _hwndListView(hwndListView),
         _grabOffset(),
-        _haveGrabOffset(false)
+        _haveGrabOffset(false),
+        _anchorPidl(NULL),
+        _anchorPosition(),
+        _haveDragItems(false)
     {
         if (_inner)
             _inner->AddRef();
@@ -926,6 +947,228 @@ struct DebugDropTarget : public IDropTarget
         _haveGrabOffset = true;
     }
 
+    void ClearDragItems()
+    {
+        for (size_t i = 0; i < _dragItems.size(); ++i)
+        {
+            if (_dragItems[i].pidl)
+            {
+                CoTaskMemFree(
+                    _dragItems[i].pidl
+                );
+
+                _dragItems[i].pidl = NULL;
+            }
+        }
+
+        _dragItems.clear();
+
+        if (_anchorPidl)
+        {
+            CoTaskMemFree(
+                _anchorPidl
+            );
+
+            _anchorPidl = NULL;
+        }
+
+        _anchorPosition.x = 0;
+        _anchorPosition.y = 0;
+
+        _haveDragItems = false;
+    }
+
+    void BeginDrag(int anchorIndex)
+    {
+        ClearDragItems();
+
+        if (!_folderView)
+            return;
+
+        /*
+         * 判断鼠标抓住的这个图标
+         * 在 WM_LBUTTONDOWN 之前是不是已经被选中。
+         */
+        bool anchorWasSelected =
+            (ListView_GetItemState(
+                _hwndListView,
+                anchorIndex,
+                LVIS_SELECTED
+            ) & LVIS_SELECTED) != 0;
+
+        /*
+         * 如果 anchor 原来没有被选中，
+         * 那么这次拖动只应该拖它自己。
+         *
+         * 如果 anchor 原来已经被选中，
+         * 那么拖动整个选择组。
+         */
+        if (!anchorWasSelected)
+        {
+            PITEMID_CHILD child = NULL;
+
+            HRESULT hr =
+                _folderView->Item(
+                    anchorIndex,
+                    &child
+                );
+
+            if (FAILED(hr) ||
+                !child)
+            {
+                return;
+            }
+
+            POINT position = {
+                0,
+                0
+            };
+
+            hr =
+                _folderView->GetItemPosition(
+                    child,
+                    &position
+                );
+
+            if (FAILED(hr))
+            {
+                CoTaskMemFree(child);
+                return;
+            }
+
+            DragItem item;
+
+            item.pidl = child;
+            item.position = position;
+
+            _dragItems.push_back(item);
+
+            /*
+             * anchor 就是唯一拖动的图标。
+             */
+            _anchorPidl = NULL;
+
+            hr =
+                _folderView->Item(
+                    anchorIndex,
+                    &_anchorPidl
+                );
+
+            if (FAILED(hr) ||
+                !_anchorPidl)
+            {
+                ClearDragItems();
+                return;
+            }
+
+            _anchorPosition = position;
+
+            _haveDragItems = true;
+
+            return;
+        }
+
+        /*
+         * =====================================================
+         * anchor 原来已经被选中
+         *
+         * 这种情况下才保存整个选择组。
+         * =====================================================
+         */
+
+        int index = -1;
+
+        while ((index =
+            ListView_GetNextItem(
+                _hwndListView,
+                index,
+                LVNI_SELECTED
+            )) != -1)
+        {
+            PITEMID_CHILD child = NULL;
+
+            HRESULT hr =
+                _folderView->Item(
+                    index,
+                    &child
+                );
+
+            if (FAILED(hr) ||
+                !child)
+            {
+                continue;
+            }
+
+            POINT position = {
+                0,
+                0
+            };
+
+            hr =
+                _folderView->GetItemPosition(
+                    child,
+                    &position
+                );
+
+            if (FAILED(hr))
+            {
+                CoTaskMemFree(child);
+                continue;
+            }
+
+            DragItem item;
+
+            item.pidl = child;
+            item.position = position;
+
+            _dragItems.push_back(item);
+        }
+
+        if (_dragItems.empty())
+            return;
+
+        /*
+         * 找真正被抓住的 anchor。
+         */
+        PITEMID_CHILD anchor = NULL;
+
+        HRESULT hr =
+            _folderView->Item(
+                anchorIndex,
+                &anchor
+            );
+
+        if (FAILED(hr) ||
+            !anchor)
+        {
+            ClearDragItems();
+            return;
+        }
+
+        POINT anchorPosition = {
+            0,
+            0
+        };
+
+        hr =
+            _folderView->GetItemPosition(
+                anchor,
+                &anchorPosition
+            );
+
+        if (FAILED(hr))
+        {
+            CoTaskMemFree(anchor);
+            ClearDragItems();
+            return;
+        }
+
+        _anchorPidl = anchor;
+
+        _anchorPosition = anchorPosition;
+
+        _haveDragItems = true;
+    }
 
     void ClearGrabOffset()
     {
@@ -1024,7 +1267,6 @@ struct DebugDropTarget : public IDropTarget
         return _inner->DragLeave();
     }
 
-
     HRESULT STDMETHODCALLTYPE Drop(
         IDataObject* data,
         DWORD key,
@@ -1037,12 +1279,8 @@ struct DebugDropTarget : public IDropTarget
         if (!_inner)
             return E_FAIL;
 
-
         /*
-         * 1.
-         *
-         * 先让 Windows Shell
-         * 按照原生方式执行 Drop。
+         * 1. 先让 Windows Shell 原生处理 Drop。
          */
         HRESULT hrDrop =
             _inner->Drop(
@@ -1052,144 +1290,135 @@ struct DebugDropTarget : public IDropTarget
                 effect
             );
 
-
-        /*
-         * Shell Drop 失败，
-         * 我们什么都不再做。
-         */
         if (FAILED(hrDrop))
-            return hrDrop;
-
-
-        /*
-         * 没有 IFolderView2，
-         * 无法进行最终位置修正。
-         */
-        if (!_folderView)
-            return hrDrop;
-
-
-        /*
-         * 2.
-         *
-         * 找到当前被选中的图标。
-         *
-         * 这里暂时仍然只处理单个图标。
-         */
-        int index =
-            ListView_GetNextItem(
-                _hwndListView,
-                -1,
-                LVNI_SELECTED
-            );
-
-
-        if (index < 0)
-            return hrDrop;
-
-
-        /*
-         * 3.
-         *
-         * 获取当前图标 PIDL。
-         */
-        PITEMID_CHILD child = NULL;
-
-        HRESULT hr =
-            _folderView->Item(
-                index,
-                &child
-            );
-
-
-        if (FAILED(hr) ||
-            !child)
         {
+            ClearDragItems();
             return hrDrop;
         }
 
+        if (!_folderView ||
+            !_haveDragItems ||
+            !_anchorPidl ||
+            _dragItems.empty())
+        {
+            ClearDragItems();
+            return hrDrop;
+        }
 
         /*
-         * 4.
-         *
-         * Drop 的 POINTL 是屏幕坐标。
-         *
-         * 转换成 SysListView32
-         * 的 client 坐标。
+         * 2. Drop 的屏幕坐标
+         *    转成 ListView client 坐标。
          */
-        POINT position;
+        POINT dropPosition;
 
-        position.x = pt.x;
-        position.y = pt.y;
+        dropPosition.x = pt.x;
+        dropPosition.y = pt.y;
 
         ScreenToClient(
             _hwndListView,
-            &position
+            &dropPosition
         );
 
+        /*
+         * 3. 计算 anchor 的最终位置。
+         *
+         * 鼠标位置 - 抓取偏移
+         */
+        POINT newAnchorPosition;
+
+        newAnchorPosition.x =
+            dropPosition.x -
+            _grabOffset.x;
+
+        newAnchorPosition.y =
+            dropPosition.y -
+            _grabOffset.y;
 
         /*
-         * 5.
-         *
-         * 减去鼠标抓取图标时的偏移。
-         *
-         * 例如：
-         *
-         * 鼠标抓在图标中心：
-         *
-         * grabOffset =
-         *     (图标中心 - 图标左上角)
-         *
-         * Drop 时：
-         *
-         * 图标左上角 =
-         *     鼠标位置 - grabOffset
+         * 4. 计算整个选择组的位移。
          */
-        if (_haveGrabOffset)
-        {
-            position.x -=
-                _grabOffset.x;
+        LONG dx =
+            newAnchorPosition.x -
+            _anchorPosition.x;
 
-            position.y -=
-                _grabOffset.y;
+        LONG dy =
+            newAnchorPosition.y -
+            _anchorPosition.y;
+
+        /*
+         * 5. 为每一个选中图标计算新位置。
+         */
+        vector<LPCITEMIDLIST> pidls;
+        vector<POINT> positions;
+
+        pidls.reserve(
+            _dragItems.size()
+        );
+
+        positions.reserve(
+            _dragItems.size()
+        );
+
+        for (size_t i = 0;
+            i < _dragItems.size();
+            ++i)
+        {
+            DragItem& item =
+                _dragItems[i];
+
+            if (!item.pidl)
+                continue;
+
+            POINT newPosition;
+
+            newPosition.x =
+                item.position.x + dx;
+
+            newPosition.y =
+                item.position.y + dy;
+
+            pidls.push_back(
+                item.pidl
+            );
+
+            positions.push_back(
+                newPosition
+            );
         }
 
+        if (pidls.empty())
+        {
+            ClearDragItems();
+            return hrDrop;
+        }
 
         /*
-         * 6.
-         *
-         * 让 Shell 设置图标最终位置。
+         * 6. 一次性让 Shell 定位所有图标。
          */
-        LPCITEMIDLIST pidl = child;
-
         HRESULT hrPosition =
             _folderView->SelectAndPositionItems(
-                1,
-                &pidl,
-                &position,
+                (UINT)pidls.size(),
+                pidls.data(),
+                positions.data(),
                 SVSI_POSITIONITEM |
                 SVSI_SELECT |
                 SVSI_NOTAKEFOCUS
             );
 
-
         /*
-         * 7.
-         *
-         * 测试阶段可以看到最终坐标。
+         * 7. 调试信息。
          */
-        TCHAR buf[1024];
+       /* TCHAR buf[1024];
 
         wsprintf(
             buf,
-            TEXT("Native Shell Drop\r\n")
+            TEXT("Multi Item Drop\r\n")
             TEXT("====================\r\n\r\n")
 
-            TEXT("Drop screen:\r\n")
-            TEXT("x = %ld\r\n")
-            TEXT("y = %ld\r\n\r\n")
+            TEXT("Items:\r\n")
+            TEXT("%u\r\n\r\n")
 
-            TEXT("ListView client:\r\n")
+            TEXT("Drop client:\r\n")
             TEXT("x = %ld\r\n")
             TEXT("y = %ld\r\n\r\n")
 
@@ -1197,54 +1426,60 @@ struct DebugDropTarget : public IDropTarget
             TEXT("x = %ld\r\n")
             TEXT("y = %ld\r\n\r\n")
 
-            TEXT("Final Shell position:\r\n")
+            TEXT("Anchor before:\r\n")
+            TEXT("x = %ld\r\n")
+            TEXT("y = %ld\r\n\r\n")
+
+            TEXT("Anchor after:\r\n")
+            TEXT("x = %ld\r\n")
+            TEXT("y = %ld\r\n\r\n")
+
+            TEXT("Delta:\r\n")
             TEXT("x = %ld\r\n")
             TEXT("y = %ld\r\n\r\n")
 
             TEXT("SelectAndPositionItems:\r\n")
             TEXT("hr = 0x%08X"),
 
-            pt.x,
-            pt.y,
+            (UINT)pidls.size(),
 
-            position.x,
-            position.y,
+            dropPosition.x,
+            dropPosition.y,
 
             _grabOffset.x,
             _grabOffset.y,
 
-            position.x,
-            position.y,
+            _anchorPosition.x,
+            _anchorPosition.y,
+
+            newAnchorPosition.x,
+            newAnchorPosition.y,
+
+            dx,
+            dy,
 
             hrPosition
         );
 
-/*
         MessageBox(
             _hwndListView,
             buf,
             TEXT("DEBUG"),
             MB_OK
         );
-*/
-
+        */
         /*
-         * 8.
-         *
-         * 释放 Shell 返回的 PIDL。
+         * 8. 清理本次拖动的数据。
          */
-        CoTaskMemFree(child);
-
+        ClearDragItems();
 
         /*
-         * 9.
-         *
-         * 返回原生 Shell Drop 的结果，
-         * 而不是把我们的定位结果
-         * 当成 Drop 本身的结果。
+         * Drop 本身仍然返回原生 Shell
+         * 的结果。
          */
         return hrDrop;
     }
+    
 };
 
 LRESULT CALLBACK DesktopShellView::ListViewProc(
@@ -1259,10 +1494,6 @@ LRESULT CALLBACK DesktopShellView::ListViewProc(
             GWLP_USERDATA
         );
 
-    /*
-     * 只处理真正的 SysListView32
-     * 鼠标按下。
-     */
     if (desktop &&
         msg == WM_LBUTTONDOWN)
     {
@@ -1274,9 +1505,6 @@ LRESULT CALLBACK DesktopShellView::ListViewProc(
         mouse.y =
             GET_Y_LPARAM(lparam);
 
-        /*
-         * 找鼠标下面的图标。
-         */
         int index =
             ListView_HitTest(
                 hwnd,
@@ -1334,6 +1562,11 @@ LRESULT CALLBACK DesktopShellView::ListViewProc(
                                 grabX,
                                 grabY
                             );
+
+                        desktop->_debugDropTarget
+                            ->BeginDrag(
+                                index
+                            );
                     }
 
                     CoTaskMemFree(child);
@@ -1343,13 +1576,7 @@ LRESULT CALLBACK DesktopShellView::ListViewProc(
             }
         }
     }
-    /*
-     * 非常重要：
-     *
-     * 处理完我们自己的 WM_LBUTTONDOWN
-     * 后，必须继续交给原来的
-     * SysListView32 WndProc。
-     */
+
     if (desktop &&
         desktop->_oldListViewProc)
     {
