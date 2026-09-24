@@ -855,14 +855,13 @@ DesktopShellView::~DesktopShellView()
         _hbrWallp = NULL;
     }
 }
+
 struct DebugDropTarget : public IDropTarget
 {
     LONG _ref;
 
     IDropTarget* _inner;
     IFolderView2* _folderView;
-    IShellView* _shellView;
-    IShellBrowser* _shellBrowser;
 
     HWND _hwndListView;
 
@@ -888,17 +887,13 @@ struct DebugDropTarget : public IDropTarget
     POINT _anchorPosition;
     bool _haveDragItems;
 
-
     DebugDropTarget(
         IDropTarget* inner,
         IShellView* shellView,
-        IShellBrowser* shellBrowser,
         HWND hwndListView)
         : _ref(1),
         _inner(inner),
         _folderView(NULL),
-        _shellView(shellView),
-        _shellBrowser(shellBrowser),
         _hwndListView(hwndListView),
         _grabOffset(),
         _haveGrabOffset(false),
@@ -909,15 +904,9 @@ struct DebugDropTarget : public IDropTarget
         if (_inner)
             _inner->AddRef();
 
-        if (_shellView)
-            _shellView->AddRef();
-
-        if (_shellBrowser)
-            _shellBrowser->AddRef();
-
-        if (_shellView)
+        if (shellView)
         {
-            _shellView->QueryInterface(
+            shellView->QueryInterface(
                 IID_IFolderView2,
                 (void**)&_folderView
             );
@@ -927,24 +916,10 @@ struct DebugDropTarget : public IDropTarget
 
     ~DebugDropTarget()
     {
-        ClearDragItems();
-
         if (_folderView)
         {
             _folderView->Release();
             _folderView = NULL;
-        }
-
-        if (_shellView)
-        {
-            _shellView->Release();
-            _shellView = NULL;
-        }
-
-        if (_shellBrowser)
-        {
-            _shellBrowser->Release();
-            _shellBrowser = NULL;
         }
 
         if (_inner)
@@ -955,6 +930,13 @@ struct DebugDropTarget : public IDropTarget
     }
 
 
+    /*
+     * 保存鼠标按下时：
+     *
+     * 鼠标位置 - 图标位置
+     *
+     * 得到的相对偏移。
+     */
     void SetGrabOffset(
         LONG x,
         LONG y)
@@ -965,21 +947,9 @@ struct DebugDropTarget : public IDropTarget
         _haveGrabOffset = true;
     }
 
-
-    void ClearGrabOffset()
-    {
-        _grabOffset.x = 0;
-        _grabOffset.y = 0;
-
-        _haveGrabOffset = false;
-    }
-
-
     void ClearDragItems()
     {
-        for (size_t i = 0;
-            i < _dragItems.size();
-            ++i)
+        for (size_t i = 0; i < _dragItems.size(); ++i)
         {
             if (_dragItems[i].pidl)
             {
@@ -1008,7 +978,6 @@ struct DebugDropTarget : public IDropTarget
         _haveDragItems = false;
     }
 
-
     void BeginDrag(int anchorIndex)
     {
         ClearDragItems();
@@ -1017,8 +986,8 @@ struct DebugDropTarget : public IDropTarget
             return;
 
         /*
-         * 判断鼠标抓住的图标在 WM_LBUTTONDOWN
-         * 之前是否已经处于选中状态。
+         * 判断鼠标抓住的这个图标
+         * 在 WM_LBUTTONDOWN 之前是不是已经被选中。
          */
         bool anchorWasSelected =
             (ListView_GetItemState(
@@ -1027,13 +996,12 @@ struct DebugDropTarget : public IDropTarget
                 LVIS_SELECTED
             ) & LVIS_SELECTED) != 0;
 
-
         /*
-         * =====================================================
-         * anchor 原来没有被选中
+         * 如果 anchor 原来没有被选中，
+         * 那么这次拖动只应该拖它自己。
          *
-         * 只拖动当前这个图标。
-         * =====================================================
+         * 如果 anchor 原来已经被选中，
+         * 那么拖动整个选择组。
          */
         if (!anchorWasSelected)
         {
@@ -1075,10 +1043,11 @@ struct DebugDropTarget : public IDropTarget
 
             _dragItems.push_back(item);
 
-
             /*
-             * 保存 anchor PIDL。
+             * anchor 就是唯一拖动的图标。
              */
+            _anchorPidl = NULL;
+
             hr =
                 _folderView->Item(
                     anchorIndex,
@@ -1093,17 +1062,17 @@ struct DebugDropTarget : public IDropTarget
             }
 
             _anchorPosition = position;
+
             _haveDragItems = true;
 
             return;
         }
 
-
         /*
          * =====================================================
          * anchor 原来已经被选中
          *
-         * 保存整个选择组。
+         * 这种情况下才保存整个选择组。
          * =====================================================
          */
 
@@ -1158,9 +1127,8 @@ struct DebugDropTarget : public IDropTarget
         if (_dragItems.empty())
             return;
 
-
         /*
-         * 找真正被鼠标抓住的 anchor。
+         * 找真正被抓住的 anchor。
          */
         PITEMID_CHILD anchor = NULL;
 
@@ -1196,8 +1164,18 @@ struct DebugDropTarget : public IDropTarget
         }
 
         _anchorPidl = anchor;
+
         _anchorPosition = anchorPosition;
+
         _haveDragItems = true;
+    }
+
+    void ClearGrabOffset()
+    {
+        _grabOffset.x = 0;
+        _grabOffset.y = 0;
+
+        _haveGrabOffset = false;
     }
 
 
@@ -1289,7 +1267,6 @@ struct DebugDropTarget : public IDropTarget
         return _inner->DragLeave();
     }
 
-
     HRESULT STDMETHODCALLTYPE Drop(
         IDataObject* data,
         DWORD key,
@@ -1302,11 +1279,8 @@ struct DebugDropTarget : public IDropTarget
         if (!_inner)
             return E_FAIL;
 
-
         /*
-         * =====================================================
-         * 1. 先让 Windows Shell 原生处理 Drop
-         * =====================================================
+         * 1. 先让 Windows Shell 原生处理 Drop。
          */
         HRESULT hrDrop =
             _inner->Drop(
@@ -1322,12 +1296,6 @@ struct DebugDropTarget : public IDropTarget
             return hrDrop;
         }
 
-
-        /*
-         * =====================================================
-         * 2. 检查我们的拖动信息
-         * =====================================================
-         */
         if (!_folderView ||
             !_haveDragItems ||
             !_anchorPidl ||
@@ -1337,14 +1305,9 @@ struct DebugDropTarget : public IDropTarget
             return hrDrop;
         }
 
-
         /*
-         * =====================================================
-         * 3. Drop 的屏幕坐标
-         *
-         * POINTL 是屏幕坐标。
-         * 转成 ListView client 坐标。
-         * =====================================================
+         * 2. Drop 的屏幕坐标
+         *    转成 ListView client 坐标。
          */
         POINT dropPosition;
 
@@ -1356,13 +1319,10 @@ struct DebugDropTarget : public IDropTarget
             &dropPosition
         );
 
-
         /*
-         * =====================================================
-         * 4. 计算 anchor 最终位置
+         * 3. 计算 anchor 的最终位置。
          *
          * 鼠标位置 - 抓取偏移
-         * =====================================================
          */
         POINT newAnchorPosition;
 
@@ -1374,11 +1334,8 @@ struct DebugDropTarget : public IDropTarget
             dropPosition.y -
             _grabOffset.y;
 
-
         /*
-         * =====================================================
-         * 5. 计算整个选择组的位移
-         * =====================================================
+         * 4. 计算整个选择组的位移。
          */
         LONG dx =
             newAnchorPosition.x -
@@ -1388,11 +1345,8 @@ struct DebugDropTarget : public IDropTarget
             newAnchorPosition.y -
             _anchorPosition.y;
 
-
         /*
-         * =====================================================
-         * 6. 计算每一个图标的新位置
-         * =====================================================
+         * 5. 为每一个选中图标计算新位置。
          */
         vector<LPCITEMIDLIST> pidls;
         vector<POINT> positions;
@@ -1432,18 +1386,14 @@ struct DebugDropTarget : public IDropTarget
             );
         }
 
-
         if (pidls.empty())
         {
             ClearDragItems();
             return hrDrop;
         }
 
-
         /*
-         * =====================================================
-         * 7. 一次性让 Shell 定位所有图标
-         * =====================================================
+         * 6. 一次性让 Shell 定位所有图标。
          */
         HRESULT hrPosition =
             _folderView->SelectAndPositionItems(
@@ -1455,44 +1405,83 @@ struct DebugDropTarget : public IDropTarget
                 SVSI_NOTAKEFOCUS
             );
 
-
         /*
-         * =====================================================
-         * 8. 定位成功后保存 View State
-         *
-         * 注意：
-         *
-         * 这里只调用 SaveViewState()。
-         *
-         * 不调用 GetViewStateStream()
-         * 不调用 SaveViewStateStream()
-         *
-         * View State 的 Stream 仍然由你的
-         * IShellBrowserImpl::GetViewStateStream()
-         * 提供。
-         * =====================================================
+         * 7. 调试信息。
          */
-        if (SUCCEEDED(hrPosition) &&
-            _shellView)
-        {
-            _shellView->SaveViewState();
-        }
+       /* TCHAR buf[1024];
 
+        wsprintf(
+            buf,
+            TEXT("Multi Item Drop\r\n")
+            TEXT("====================\r\n\r\n")
 
+            TEXT("Items:\r\n")
+            TEXT("%u\r\n\r\n")
+
+            TEXT("Drop client:\r\n")
+            TEXT("x = %ld\r\n")
+            TEXT("y = %ld\r\n\r\n")
+
+            TEXT("Grab offset:\r\n")
+            TEXT("x = %ld\r\n")
+            TEXT("y = %ld\r\n\r\n")
+
+            TEXT("Anchor before:\r\n")
+            TEXT("x = %ld\r\n")
+            TEXT("y = %ld\r\n\r\n")
+
+            TEXT("Anchor after:\r\n")
+            TEXT("x = %ld\r\n")
+            TEXT("y = %ld\r\n\r\n")
+
+            TEXT("Delta:\r\n")
+            TEXT("x = %ld\r\n")
+            TEXT("y = %ld\r\n\r\n")
+
+            TEXT("SelectAndPositionItems:\r\n")
+            TEXT("hr = 0x%08X"),
+
+            (UINT)pidls.size(),
+
+            dropPosition.x,
+            dropPosition.y,
+
+            _grabOffset.x,
+            _grabOffset.y,
+
+            _anchorPosition.x,
+            _anchorPosition.y,
+
+            newAnchorPosition.x,
+            newAnchorPosition.y,
+
+            dx,
+            dy,
+
+            hrPosition
+        );
+
+        MessageBox(
+            _hwndListView,
+            buf,
+            TEXT("DEBUG"),
+            MB_OK
+        );
+        */
         /*
-         * =====================================================
-         * 9. 清理本次拖动数据
-         * =====================================================
+         * 8. 清理本次拖动的数据。
          */
         ClearDragItems();
 
-
         /*
-         * Drop 本身仍然返回原生 Shell 的结果。
+         * Drop 本身仍然返回原生 Shell
+         * 的结果。
          */
         return hrDrop;
     }
+    
 };
+
 LRESULT CALLBACK DesktopShellView::ListViewProc(
     HWND hwnd,
     UINT msg,
@@ -1625,61 +1614,17 @@ bool DesktopShellView::InitDragDrop()
 
     RevokeDragDrop(_hwndListView);
 
-
-    /*
-     * =====================================================
-     * 找 DesktopWindow 提供的 IShellBrowser
-     *
-     * _hwndListView
-     *     ↓
-     * DesktopShellView
-     *     ↓
-     * DesktopWindow
-     *
-     * DesktopWindow 通过 WM_GETISHELLBROWSER
-     * 返回自己的 IShellBrowser。
-     * =====================================================
-     */
-    IShellBrowser* shellBrowser = NULL;
-
-    HWND hwnd = _hwndListView;
-
-    while (hwnd)
-    {
-        LRESULT result =
-            SendMessage(
-                hwnd,
-                WM_GETISHELLBROWSER,
-                0,
-                0
-            );
-
-        if (result)
-        {
-            shellBrowser =
-                (IShellBrowser*)result;
-
-            break;
-        }
-
-        hwnd = GetParent(hwnd);
-    }
-
-
     _debugDropTarget =
         new DebugDropTarget(
             dt,
             _pShellView,
-            shellBrowser,
             _hwndListView
         );
 
     dt->Release();
 
-
     if (!_debugDropTarget)
         return false;
-
 
     hr =
         RegisterDragDrop(
