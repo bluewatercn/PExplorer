@@ -37,7 +37,8 @@ struct IShellBrowserImpl
        public IServiceProvider,
        public IOleCommandTarget {
     IShellBrowserImpl()
-        :  _dwRef(0)
+        : _dwRef(0),
+        _viewStateStream(NULL)
     {
     }
 
@@ -87,8 +88,12 @@ struct IShellBrowserImpl
     virtual HRESULT STDMETHODCALLTYPE QueryStatus(const GUID *pguidCmdGroup, ULONG cCmds, OLECMD prgCmds[], OLECMDTEXT *pCmdText);
     virtual HRESULT STDMETHODCALLTYPE Exec(const GUID *pguidCmdGroup, DWORD nCmdID, DWORD nCmdexecopt, VARIANT *pvaIn, VARIANT *pvaOut);
 
+    virtual HRESULT STDMETHODCALLTYPE SaveViewStateStream();
+
+
 protected:
     DWORD   _dwRef;
+    IStream* _viewStateStream;
 
     virtual HRESULT OnDefaultCommand(LPIDA pida) {return E_NOTIMPL;}
 };
