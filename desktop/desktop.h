@@ -111,7 +111,6 @@ protected:
     HRESULT DoDesktopContextMenu(int x, int y);
     void PositionIcons(int dir = 1);
     HMENU GetShellViewContextMenu();
-    HMENU GetWinXNewContextMenu();
 
     HWND _hwndListView;
     int _icon_algo;
@@ -172,5 +171,4 @@ protected:
     virtual HRESULT OnDefaultCommand(LPIDA pida);
     void    RegisterHotkeys(BOOL unreg = FALSE);
     void    ProcessHotKey(int id_hotkey);
-    void    ProcessUserCommand(WPARAM wparam, LPARAM lparam);
 };

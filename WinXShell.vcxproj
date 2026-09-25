@@ -113,10 +113,10 @@
     <IncludePath>$(ProjectDir)vendor\lua\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)$(PlatformName)\$(Configuration)\</OutDir>
     <IntDir>$(PlatformName)\$(Configuration)\$(ProjectName)\</IntDir>
     <IncludePath>$(ProjectDir)vendor\lua\include;$(ProjectDir)..\duilib;$(IncludePath)</IncludePath>
+    <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(SolutionDir)$(PlatformName)\$(Configuration)\</OutDir>
@@ -141,7 +141,7 @@
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_NO_ALPHABLEND;_DEBUG;WIN32;_WIN32_IE=0x0700;_WIN32_WINNT=0x0601;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES_COUNT;UILIB_STATIC;_LIGHT_STARTMENU;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_NO_ALPHABLEND;_DEBUG;WIN32;_WIN32_IE=0x0700;_WIN32_WINNT=0x0601;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES_COUNT;UILIB_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -244,7 +244,7 @@ cscript ResBuilder.vbs
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_NO_ALPHABLEND;_DEBUG;WIN32;_WIN32_IE=0x0700;_WIN32_WINNT=0x0601;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES_COUNT;UILIB_STATIC;_LIGHT_STARTMENU;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_NO_ALPHABLEND;_DEBUG;WIN32;_WIN32_IE=0x0700;_WIN32_WINNT=0x0601;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES_COUNT;UILIB_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
@@ -297,7 +297,7 @@ cscript ResBuilder.vbs
     <ClCompile>
       <Optimization>MinSpace</Optimization>
       <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
-      <PreprocessorDefinitions>_NO_ALPHABLEND;NDEBUG;WIN32;_WIN32_IE=0x0700;_WIN32_WINNT=0x0601;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES_COUNT;UILIB_STATIC;_LIGHT_STARTMENU;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_NO_ALPHABLEND;NDEBUG;WIN32;_WIN32_IE=0x0700;_WIN32_WINNT=0x0601;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES_COUNT;UILIB_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -400,7 +400,7 @@ cscript ResBuilder.vbs
     <ClCompile>
       <Optimization>MinSpace</Optimization>
       <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
-      <PreprocessorDefinitions>_NO_ALPHABLEND;NDEBUG;WIN32;_WIN32_IE=0x0700;_WIN32_WINNT=0x0601;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES_COUNT;UILIB_STATIC;_LIGHT_STARTMENU;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_NO_ALPHABLEND;NDEBUG;WIN32;_WIN32_IE=0x0700;_WIN32_WINNT=0x0601;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES_COUNT;UILIB_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -445,28 +445,11 @@ cscript ResBuilder.vbs
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="customization\powermenu.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">NotUsing</PrecompiledHeader>
-    </ClCompile>
     <ClCompile Include="customization\startbutton.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
-    </ClCompile>
-    <ClCompile Include="dialogs\about.cpp" />
-    <ClCompile Include="features\brightnesslayer.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="features\showdesktop.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
@@ -545,30 +528,14 @@ cscript ResBuilder.vbs
     <ClCompile Include="luaengine\StartmenuHelper.cpp" />
     <ClCompile Include="luaengine\SystemHelper.cpp" />
     <ClCompile Include="luaengine\TaskbarHelper.cpp" />
-    <ClCompile Include="luaengine\VolumeHelper.cpp" />
     <ClCompile Include="shell\fileexplorer.cpp" />
-    <ClCompile Include="systemsettings\DesktopCommand.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">NotUsing</PrecompiledHeader>
-    </ClCompile>
     <ClCompile Include="systemsettings\MonitorAdapter.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="systemsettings\Volume.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">NotUsing</PrecompiledHeader>
-    </ClCompile>
+    <ClCompile Include="taskbar\native_startmenu\native_startmenu.cpp" />
     <ClCompile Include="taskbar\thumbnail.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
@@ -616,7 +583,6 @@ cscript ResBuilder.vbs
     <ClCompile Include="utility\window.cpp" />
     <ClCompile Include="taskbar\desktopbar.cpp" />
     <ClCompile Include="taskbar\quicklaunch.cpp" />
-    <ClCompile Include="taskbar\startmenu.cpp" />
     <ClCompile Include="taskbar\taskbar.cpp" />
     <ClCompile Include="taskbar\traynotify.cpp" />
     <ClCompile Include="desktop\desktop.cpp" />
@@ -674,7 +640,6 @@ cscript ResBuilder.vbs
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="customization\powermenu.h" />
     <ClInclude Include="customization\startbutton.h" />
     <ClInclude Include="features\features.h" />
     <ClInclude Include="features\reshelper.h" />
@@ -684,10 +649,8 @@ cscript ResBuilder.vbs
     <ClInclude Include="luaengine\LuaHelper.h" />
     <ClInclude Include="luaengine\WindowCompositionAttribute.h" />
     <ClInclude Include="shell\fileexplorer.h" />
-    <ClInclude Include="systemsettings\DesktopCommand.h" />
     <ClInclude Include="systemsettings\MonitorAdapter.h" />
-    <ClInclude Include="systemsettings\Volume.h" />
-    <ClInclude Include="systemsettings\WLAN.h" />
+    <ClInclude Include="taskbar\native_startmenu\native_startmenu.h" />
     <ClInclude Include="utility\Dialog.h" />
     <ClInclude Include="utility\DiskHelper.h" />
     <ClInclude Include="utility\FolderOptions.h" />
@@ -703,7 +666,6 @@ cscript ResBuilder.vbs
     <ClInclude Include="resource.h" />
     <ClInclude Include="taskbar\desktopbar.h" />
     <ClInclude Include="taskbar\quicklaunch.h" />
-    <ClInclude Include="taskbar\startmenu.h" />
     <ClInclude Include="taskbar\taskbar.h" />
     <ClInclude Include="taskbar\traynotify.h" />
     <ClInclude Include="desktop\desktop.h" />
@@ -789,8 +751,6 @@ cscript ResBuilder.vbs
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="explorer-en.rc" />
-    <ResourceCompile Include="explorer-ja.rc" />
-    <ResourceCompile Include="explorer-ru.rc" />
     <ResourceCompile Include="explorer-zh.rc" />
     <ResourceCompile Include="explorer_intres.rc" />
   </ItemGroup>

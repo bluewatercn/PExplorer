@@ -39,9 +39,6 @@
     <ClCompile Include="dialogs\settings.cpp">
       <Filter>dialogs</Filter>
     </ClCompile>
-    <ClCompile Include="taskbar\startmenu.cpp">
-      <Filter>taskbar</Filter>
-    </ClCompile>
     <ClCompile Include="taskbar\taskbar.cpp">
       <Filter>taskbar</Filter>
     </ClCompile>
@@ -69,9 +66,6 @@
     <ClCompile Include="utility\TrayHelper.cpp">
       <Filter>utility</Filter>
     </ClCompile>
-    <ClCompile Include="systemsettings\Volume.cpp">
-      <Filter>systemsettings</Filter>
-    </ClCompile>
     <ClCompile Include="features\console.cpp">
       <Filter>features</Filter>
     </ClCompile>
@@ -87,9 +81,6 @@
     </ClCompile>
     <ClCompile Include="features\snippet.cpp">
       <Filter>features</Filter>
-    </ClCompile>
-    <ClCompile Include="customization\powermenu.cpp">
-      <Filter>customization</Filter>
     </ClCompile>
     <ClCompile Include="customization\startbutton.cpp">
       <Filter>customization</Filter>
@@ -109,14 +100,8 @@
     <ClCompile Include="utility\ResourceHelper.cpp">
       <Filter>utility</Filter>
     </ClCompile>
-    <ClCompile Include="systemsettings\DesktopCommand.cpp">
-      <Filter>systemsettings</Filter>
-    </ClCompile>
     <ClCompile Include="taskbar\thumbnail.cpp">
       <Filter>taskbar</Filter>
-    </ClCompile>
-    <ClCompile Include="features\brightnesslayer.cpp">
-      <Filter>features</Filter>
     </ClCompile>
     <ClCompile Include="utility\Dialog.cpp">
       <Filter>utility</Filter>
@@ -160,9 +145,6 @@
     <ClCompile Include="luaengine\SystemHelper.cpp">
       <Filter>luaengine</Filter>
     </ClCompile>
-    <ClCompile Include="luaengine\VolumeHelper.cpp">
-      <Filter>luaengine</Filter>
-    </ClCompile>
     <ClCompile Include="features\showdesktop.cpp">
       <Filter>features</Filter>
     </ClCompile>
@@ -172,8 +154,8 @@
     <ClCompile Include="utility\LogHelper.cpp">
       <Filter>utility</Filter>
     </ClCompile>
-    <ClCompile Include="dialogs\about.cpp">
-      <Filter>dialogs</Filter>
+    <ClCompile Include="taskbar\native_startmenu\native_startmenu.cpp">
+      <Filter>taskbar\native_startmenu</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -212,9 +194,6 @@
     <ClInclude Include="dialogs\settings.h">
       <Filter>dialogs</Filter>
     </ClInclude>
-    <ClInclude Include="taskbar\startmenu.h">
-      <Filter>taskbar</Filter>
-    </ClInclude>
     <ClInclude Include="taskbar\taskbar.h">
       <Filter>taskbar</Filter>
     </ClInclude>
@@ -239,23 +218,14 @@
     <ClInclude Include="systemsettings\MonitorAdapter.h">
       <Filter>systemsettings</Filter>
     </ClInclude>
-    <ClInclude Include="systemsettings\WLAN.h">
-      <Filter>systemsettings</Filter>
-    </ClInclude>
     <ClInclude Include="utility\TrayHelper.h">
       <Filter>utility</Filter>
-    </ClInclude>
-    <ClInclude Include="systemsettings\Volume.h">
-      <Filter>systemsettings</Filter>
     </ClInclude>
     <ClInclude Include="features\reshelper.h">
       <Filter>features</Filter>
     </ClInclude>
     <ClInclude Include="features\features.h">
       <Filter>features</Filter>
-    </ClInclude>
-    <ClInclude Include="customization\powermenu.h">
-      <Filter>customization</Filter>
     </ClInclude>
     <ClInclude Include="customization\startbutton.h">
       <Filter>customization</Filter>
@@ -274,9 +244,6 @@
     </ClInclude>
     <ClInclude Include="utility\ResourceHelper.h">
       <Filter>utility</Filter>
-    </ClInclude>
-    <ClInclude Include="systemsettings\DesktopCommand.h">
-      <Filter>systemsettings</Filter>
     </ClInclude>
     <ClInclude Include="utility\Dialog.h">
       <Filter>utility</Filter>
@@ -299,13 +266,14 @@
     <ClInclude Include="utility\LogHelper.h">
       <Filter>utility</Filter>
     </ClInclude>
+    <ClInclude Include="taskbar\native_startmenu\native_startmenu.h">
+      <Filter>taskbar\native_startmenu</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="explorer_intres.rc" />
     <ResourceCompile Include="explorer-en.rc" />
     <ResourceCompile Include="explorer-zh.rc" />
-    <ResourceCompile Include="explorer-ja.rc" />
-    <ResourceCompile Include="explorer-ru.rc" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\action.ico">
@@ -545,6 +513,9 @@
     </Filter>
     <Filter Include="luaengine">
       <UniqueIdentifier>{f0e0b86c-6c9f-460b-ac93-005adc88dc12}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="taskbar\native_startmenu">
+      <UniqueIdentifier>{c2e41472-7e5c-4603-8ec4-ace45e74c294}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

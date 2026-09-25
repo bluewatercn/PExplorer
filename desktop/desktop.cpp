@@ -36,7 +36,6 @@
 
 #include <VersionHelpers.h>
 
-#include "../systemsettings/DesktopCommand.h"
 #include "../taskbar/native_startmenu/native_startmenu.h"
 
 enum WallPaperStyle {
@@ -299,7 +298,6 @@ HWND DesktopWindow::Create()
 }
 
 #define WM_SHNOTIFY  (WM_USER+0x1)
-#define WM_USERCOMMAND (WM_USER+WM_COMMAND)
 
 #ifndef _WIN32_WINNT_WIN10
 #define _WIN32_WINNT_WIN10                  0x0A00
@@ -488,26 +486,6 @@ void DesktopWindow::ProcessHotKey(int id_hotkey)
         break;
     }
     //@todo implement all common hotkeys
-    }
-}
-
-void DesktopWindow::ProcessUserCommand(WPARAM wparam, LPARAM lparam)
-{
-    switch (wparam) {
-    case WM_DESKTOP_REFRESH:
-        _pShellView->Refresh();
-        break;
-    case WM_DESKTOP_SETICONSIZE: {
-        DesktopCommand dtcmd(_pShellView, _pFolderView);
-        dtcmd.SetIconSize((int)lparam);
-        break;
-    }
-    case WM_DESKTOP_UNSETFOLDERFLAGS:
-    case WM_DESKTOP_SETFOLDERFLAGS: {
-        DesktopCommand dtcmd(_pShellView, _pFolderView);
-        dtcmd.SetFolderFlags((DWORD)lparam, int(wparam) - WM_DESKTOP_UNSETFOLDERFLAGS);
-        break;
-    }
     }
 }
 
@@ -713,10 +691,6 @@ LRESULT DesktopWindow::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
     case WM_SHNOTIFY: {
         NotificationReceipt(wparam, lparam);
         goto def;
-    }
-    case WM_USERCOMMAND: {
-        ProcessUserCommand(wparam, lparam);
-        break;
     }
 default: def:
         return super::WndProc(nmsg, wparam, lparam);
@@ -2117,40 +2091,6 @@ HMENU DesktopShellView::GetShellViewContextMenu()
     return hmenu;
 }
 
-HMENU DesktopShellView::GetWinXNewContextMenu()
-{
-    HKEY hKeys[16];
-    UINT cKeys = 0;
-    CtxMenuInterfaces *pcm_ifs = _pcmMap[TEXT("New")];
-    IContextMenu *pcm = NULL;
-
-    String menukey = JCFG3_DEF("JS_DESKTOP", "cascademenu", "WinXNew", TEXT("")).ToString();
-    if (menukey == TEXT("")) {
-        return NULL;
-    }
-
-    HMENU hmenu = CreatePopupMenu();
-    if (!hmenu) {
-        return NULL;
-    }
-
-    AddClassKeyToArray(menukey.c_str(), hKeys, &cKeys);
-    HRESULT hr = CreateDefaultContextMenu(_hwnd, &pcm, hKeys, cKeys);
-    if (FAILED(hr)) {
-        DestroyMenu(hmenu);
-        return NULL;
-    }
-    pcm = pcm_ifs->query_interfaces(pcm);
-    hr = pcm->QueryContextMenu(hmenu, 0, FCIDM_SHVIEWFIRST, FCIDM_SHVIEWLAST - 1, CMF_NORMAL | CMF_ITEMMENU | CMF_ASYNCVERBSTATE | CMF_SYNCCASCADEMENU);
-    if (FAILED(hr)) {
-        pcm_ifs->reset();
-        pcm->Release();
-        DestroyMenu(hmenu);
-        return NULL;
-    }
-    return hmenu;
-}
-
 void PrintMenuInfo(HMENU hmenu, IContextMenu *pcm, const TCHAR *space)
 {
     MENUITEMINFO mmi = {0};
@@ -2242,14 +2182,10 @@ HRESULT DesktopShellView::DoDesktopContextMenu(int x, int y)
     SetMenuDefaultItem(hmenu, -1, FALSE);
     if (GetKeyState(VK_SHIFT) < 0) {
         AppendMenu(hmenu, MF_SEPARATOR, 0, NULL);
-        AppendMenu(hmenu, 0, FCIDM_SHVIEWLAST - 1, ResString(IDS_ABOUT_EXPLORER));
     }
     UINT idCmd = TrackPopupMenu(hmenu, TPM_LEFTALIGN | TPM_RETURNCMD | TPM_RIGHTBUTTON, x, y, 0, _hwnd, NULL);
 
-    if (idCmd == FCIDM_SHVIEWLAST - 1) {
-        SetMenuCursorPos(-1, -1);
-        explorer_about(_hwnd);
-    } else if (idCmd) {
+    if (idCmd) {
         IContextMenu *pcm = _cm_ifs._pctxmenu;
         String menuname;
         WCHAR namebuffer[MAX_PATH + 1] = { 0 };

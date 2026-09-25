@@ -615,7 +615,6 @@ LRESULT DesktopBar::WndProc(UINT nmsg, WPARAM wparam, LPARAM lparam)
         SetMenuDefaultItem(menu, 0, MF_BYPOSITION);
         if (GetKeyState(VK_SHIFT) < 0) {
             menu.Append(0, NULL, MF_SEPARATOR);
-            menu.Append(ID_ABOUT_EXPLORER, ResString(IDS_ABOUT_EXPLORER));
             menu.Append(FCIDM_SHVIEWLAST - 1, ResString(IDS_TERMINATE));
         }
         menu.TrackPopupMenu(_hwnd, p);
@@ -784,10 +783,6 @@ int DesktopBar::Command(int id, int code)
 {
     if (id == IDC_TOGGLEDESKTOP) id = ID_MINIMIZE_ALL;
     switch (id) {
-    case ID_ABOUT_EXPLORER:
-        explorer_about(g_Globals._hwndDesktop);
-        break;
-
     case ID_DESKTOPBAR_SETTINGS: {
         if (!g_Globals._isWinPE && g_Globals._winvers[0] >= 10) {
             TCHAR sysPathBuff[MAX_PATH] = { 0 };

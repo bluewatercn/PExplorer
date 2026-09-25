@@ -81,7 +81,6 @@ extern "C" {
 
     extern int lua_system_call(lua_State* L, const char *funcname, int top, int base);
     extern int lua_screen_call(lua_State* L, const char *funcname, int top, int base);
-    extern int lua_volume_call(lua_State* L, const char *funcname, int top, int base);
     extern int lua_desktop_call(lua_State* L, const char *funcname, int top, int base);
     extern int lua_startmenu_call(lua_State* L, const char *funcname, int top, int base);
     extern int lua_taskbar_call(lua_State* L, const char *funcname, int top, int base);
@@ -131,8 +130,6 @@ extern "C" {
             return rc;
         } else if (func.compare(0, 8, "screen::") == 0) {
             return lua_screen_call(L, funcname, top, base);
-        } else if (func.compare(0, 8, "volume::") == 0) {
-            return lua_volume_call(L, funcname, top, base);
         } else if (func.compare(0, 9, "desktop::") == 0) {
             return lua_desktop_call(L, funcname, top, base);
         } else if (func.compare(0, 9, "taskbar::") == 0) {
