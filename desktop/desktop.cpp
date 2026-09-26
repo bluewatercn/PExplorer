@@ -2672,19 +2672,53 @@ HRESULT DesktopShellView::DoDesktopContextMenu(int x, int y)
                 (CHAR*)verb,
                 256
             );
-
-        if (SUCCEEDED(hrVerb) &&
-            _wcsicmp(verb, L"refresh") == 0)
-        {
-            //MessageBox(NULL, TEXT(""), TEXT(""), 0);
+        
+            if (SUCCEEDED(hrVerb) &&
+                _wcsicmp(verb, L"refresh") == 0)
+            {
                 Refresh();
-                return S_OK;
-            
-        }
-        else
-        {
-            DoInvokeCommand(_hwnd, pcm, idCmd);
-        }
+            }
+            else if (SUCCEEDED(hrVerb) &&
+                _wcsicmp(verb, L"arrangeauto") == 0)
+            {
+                DeleteFile(
+                    TEXT("desktop_positions.dat")
+                );
+
+                DoInvokeCommand(
+                    _hwnd,
+                    pcm,
+                    idCmd
+                );
+            }
+            else
+            {
+                WCHAR menuText[256] = { 0 };
+
+                GetMenuStringW(
+                    hmenu,
+                    idCmd,
+                    menuText,
+                    _countof(menuText),
+                    MF_BYCOMMAND
+                );
+
+                if (_wcsicmp(menuText, L"名称") == 0 ||
+                    _wcsicmp(menuText, L"大小") == 0 ||
+                    _wcsicmp(menuText, L"项目类型") == 0 ||
+                    _wcsicmp(menuText, L"修改日期") == 0)
+                {
+                    DeleteFile(
+                        TEXT("desktop_positions.dat")
+                    );
+                }
+
+                DoInvokeCommand(
+                    _hwnd,
+                    pcm,
+                    idCmd
+                );
+            }
 
         if (pcm != cmNew_ifs._pctxmenu)
         {
