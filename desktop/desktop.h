@@ -75,6 +75,8 @@ typedef struct DesktopShellView :
     POINT GetMenuCursorPos();
     void SetMenuCursorPos(LONG x, LONG y);
 
+    void RestoreIconPositions();
+
 protected:
     IShellView* _pShellView;
 
@@ -99,6 +101,7 @@ protected:
 
     // 下面保持你原来的内容
     void Refresh();
+    void RefreshListViewItems();
     bool DoContextMenu(int x, int y);
     HBITMAP SHLoadDIBitmap(
         LPCTSTR szFileName,

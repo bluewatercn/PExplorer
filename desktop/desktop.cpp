@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2003, 2004, 2005 Martin Fuchs
  *
  * This library is free software; you can redistribute it and/or
@@ -29,6 +29,8 @@
 #include <precomp.h>
 #include <olectl.h>
 #include <ole2.h>
+#include <vector>
+#include <unordered_map>
 #include "../resource.h"
 
 #include "../taskbar/desktopbar.h"
@@ -37,6 +39,14 @@
 #include <VersionHelpers.h>
 
 #include "../taskbar/native_startmenu/native_startmenu.h"
+
+static const IID IID_IShellFolderView_Local =
+{
+    0x37a378c0,
+    0xf82d,
+    0x11ce,
+    { 0xae, 0x65, 0x08, 0x00, 0x2b, 0x2e, 0x12, 0x62 }
+};
 
 enum WallPaperStyle {
     STYLE_WP_STRETCH = 0,
@@ -725,10 +735,10 @@ DesktopShellView::DesktopShellView(
     _hwndListView = GetNextWindow(hwnd, GW_CHILD);
 
     /*
-     * _hwndListView ���������� SysListView32��
+     * _hwndListView 就是真正的 SysListView32。
      *
-     * ���� DesktopShellView ָ�룬
-     * Ȼ�� subclass ListView��
+     * 保存 DesktopShellView 指针，
+     * 然后 subclass ListView。
      */
     SetWindowLongPtr(
         _hwndListView,
@@ -774,7 +784,7 @@ DesktopShellView::DesktopShellView(
 DesktopShellView::~DesktopShellView()
 {
     /*
-     * 1. �Ƚ�� OLE Drag & Drop ע�ᡣ
+     * 1. 先解除 OLE Drag & Drop 注册。
      */
     if (_hwndListView)
     {
@@ -785,8 +795,8 @@ DesktopShellView::~DesktopShellView()
 
 
     /*
-     * 2. �ָ� SysListView32
-     *    ԭ���� WndProc��
+     * 2. 恢复 SysListView32
+     *    原来的 WndProc。
      */
     if (_hwndListView &&
         _oldListViewProc)
@@ -808,7 +818,7 @@ DesktopShellView::~DesktopShellView()
 
 
     /*
-     * 3. ��ֽ��
+     * 3. 壁纸。
      */
     if (_hbmWallp)
     {
@@ -836,6 +846,7 @@ struct DebugDropTarget : public IDropTarget
 
     IDropTarget* _inner;
     IFolderView2* _folderView;
+    DesktopShellView* _desktopShellView;
 
     HWND _hwndListView;
 
@@ -864,11 +875,13 @@ struct DebugDropTarget : public IDropTarget
     DebugDropTarget(
         IDropTarget* inner,
         IShellView* shellView,
-        HWND hwndListView)
+        HWND hwndListView,
+        DesktopShellView* desktopShellView)
         : _ref(1),
         _inner(inner),
         _folderView(NULL),
         _hwndListView(hwndListView),
+        _desktopShellView(desktopShellView),
         _grabOffset(),
         _haveGrabOffset(false),
         _anchorPidl(NULL),
@@ -905,11 +918,11 @@ struct DebugDropTarget : public IDropTarget
 
 
     /*
-     * ������갴��ʱ��
+     * 保存鼠标按下时：
      *
-     * ���λ�� - ͼ��λ��
+     * 鼠标位置 - 图标位置
      *
-     * �õ������ƫ�ơ�
+     * 得到的相对偏移。
      */
     void SetGrabOffset(
         LONG x,
@@ -960,8 +973,8 @@ struct DebugDropTarget : public IDropTarget
             return;
 
         /*
-         * �ж����ץס�����ͼ��
-         * �� WM_LBUTTONDOWN ֮ǰ�ǲ����Ѿ���ѡ�С�
+         * 判断鼠标抓住的这个图标
+         * 在 WM_LBUTTONDOWN 之前是不是已经被选中。
          */
         bool anchorWasSelected =
             (ListView_GetItemState(
@@ -971,11 +984,11 @@ struct DebugDropTarget : public IDropTarget
             ) & LVIS_SELECTED) != 0;
 
         /*
-         * ��� anchor ԭ��û�б�ѡ�У�
-         * ��ô����϶�ֻӦ�������Լ���
+         * 如果 anchor 原来没有被选中，
+         * 那么这次拖动只应该拖它自己。
          *
-         * ��� anchor ԭ���Ѿ���ѡ�У�
-         * ��ô�϶�����ѡ���顣
+         * 如果 anchor 原来已经被选中，
+         * 那么拖动整个选择组。
          */
         if (!anchorWasSelected)
         {
@@ -1018,7 +1031,7 @@ struct DebugDropTarget : public IDropTarget
             _dragItems.push_back(item);
 
             /*
-             * anchor ����Ψһ�϶���ͼ�ꡣ
+             * anchor 就是唯一拖动的图标。
              */
             _anchorPidl = NULL;
 
@@ -1044,9 +1057,9 @@ struct DebugDropTarget : public IDropTarget
 
         /*
          * =====================================================
-         * anchor ԭ���Ѿ���ѡ��
+         * anchor 原来已经被选中
          *
-         * ��������²ű�������ѡ���顣
+         * 这种情况下才保存整个选择组。
          * =====================================================
          */
 
@@ -1102,7 +1115,7 @@ struct DebugDropTarget : public IDropTarget
             return;
 
         /*
-         * ��������ץס�� anchor��
+         * 找真正被抓住的 anchor。
          */
         PITEMID_CHILD anchor = NULL;
 
@@ -1241,6 +1254,149 @@ struct DebugDropTarget : public IDropTarget
         return _inner->DragLeave();
     }
 
+    void SaveIconPositions()
+    {
+        if (!_folderView || !_hwndListView)
+            return;
+
+        FILE* fp = NULL;
+
+        fopen_s(
+            &fp,
+            "desktop_positions.dat",
+            "wb"
+        );
+
+        if (!fp)
+            return;
+
+        /*
+         * 文件头
+         *
+         * Magic: "DPOS"
+         * Version: 1
+         */
+        const DWORD magic = 0x534F5044;
+        const DWORD version = 1;
+
+        if (fwrite(
+            &magic,
+            sizeof(magic),
+            1,
+            fp
+        ) != 1)
+        {
+            fclose(fp);
+            return;
+        }
+
+        if (fwrite(
+            &version,
+            sizeof(version),
+            1,
+            fp
+        ) != 1)
+        {
+            fclose(fp);
+            return;
+        }
+
+        int count =
+            ListView_GetItemCount(
+                _hwndListView
+            );
+
+        for (int i = 0;
+            i < count;
+            ++i)
+        {
+            /*
+             * 获取当前 Item 对应的 PIDL
+             */
+            PITEMID_CHILD pidl = NULL;
+
+            HRESULT hr =
+                _folderView->Item(
+                    i,
+                    &pidl
+                );
+
+            if (FAILED(hr) || !pidl)
+                continue;
+
+            /*
+             * 获取图标位置
+             */
+            POINT pt;
+
+            if (FAILED(
+                _folderView->GetItemPosition(
+                    pidl,
+                    &pt
+                )))
+            {
+                CoTaskMemFree(pidl);
+                continue;
+            }
+
+            /*
+             * 获取 PIDL 的完整二进制大小
+             */
+            UINT pidlSize =
+                ILGetSize(pidl);
+
+            if (pidlSize == 0)
+            {
+                CoTaskMemFree(pidl);
+                continue;
+            }
+
+            /*
+             * 保存：
+             *
+             * pidlSize
+             * pidl
+             * POINT
+             */
+            if (fwrite(
+                &pidlSize,
+                sizeof(pidlSize),
+                1,
+                fp
+            ) != 1)
+            {
+                CoTaskMemFree(pidl);
+                break;
+            }
+
+            if (fwrite(
+                pidl,
+                1,
+                pidlSize,
+                fp
+            ) != pidlSize)
+            {
+                CoTaskMemFree(pidl);
+                break;
+            }
+
+            if (fwrite(
+                &pt,
+                sizeof(pt),
+                1,
+                fp
+            ) != 1)
+            {
+                CoTaskMemFree(pidl);
+                break;
+            }
+
+            CoTaskMemFree(pidl);
+        }
+
+        fclose(fp);
+    }
+
     HRESULT STDMETHODCALLTYPE Drop(
         IDataObject* data,
         DWORD key,
@@ -1254,7 +1410,7 @@ struct DebugDropTarget : public IDropTarget
             return E_FAIL;
 
         /*
-         * 1. ���� Windows Shell ԭ������ Drop��
+         * 1. 先让 Windows Shell 原生处理 Drop。
          */
         HRESULT hrDrop =
             _inner->Drop(
@@ -1280,8 +1436,8 @@ struct DebugDropTarget : public IDropTarget
         }
 
         /*
-         * 2. Drop ����Ļ����
-         *    ת�� ListView client ���ꡣ
+         * 2. Drop 的屏幕坐标
+         *    转成 ListView client 坐标。
          */
         POINT dropPosition;
 
@@ -1294,9 +1450,9 @@ struct DebugDropTarget : public IDropTarget
         );
 
         /*
-         * 3. ���� anchor ������λ�á�
+         * 3. 计算 anchor 的最终位置。
          *
-         * ���λ�� - ץȡƫ��
+         * 鼠标位置 - 抓取偏移
          */
         POINT newAnchorPosition;
 
@@ -1309,7 +1465,7 @@ struct DebugDropTarget : public IDropTarget
             _grabOffset.y;
 
         /*
-         * 4. ��������ѡ�����λ�ơ�
+         * 4. 计算整个选择组的位移。
          */
         LONG dx =
             newAnchorPosition.x -
@@ -1320,7 +1476,7 @@ struct DebugDropTarget : public IDropTarget
             _anchorPosition.y;
 
         /*
-         * 5. Ϊÿһ��ѡ��ͼ�������λ�á�
+         * 5. 为每一个选中图标计算新位置。
          */
         vector<LPCITEMIDLIST> pidls;
         vector<POINT> positions;
@@ -1367,7 +1523,7 @@ struct DebugDropTarget : public IDropTarget
         }
 
         /*
-         * 6. һ������ Shell ��λ����ͼ�ꡣ
+         * 6. 一次性让 Shell 定位所有图标。
          */
         HRESULT hrPosition =
             _folderView->SelectAndPositionItems(
@@ -1380,7 +1536,7 @@ struct DebugDropTarget : public IDropTarget
             );
 
         /*
-         * 7. ������Ϣ��
+         * 7. 调试信息。
          */
        /* TCHAR buf[1024];
 
@@ -1442,14 +1598,20 @@ struct DebugDropTarget : public IDropTarget
             MB_OK
         );
         */
+
         /*
-         * 8. ���������϶������ݡ�
+        * 8. Save position
+        * */
+        SaveIconPositions();
+
+        /*
+         * 9. 清理本次拖动的数据。
          */
         ClearDragItems();
 
         /*
-         * Drop ������Ȼ����ԭ�� Shell
-         * �Ľ����
+         * Drop 本身仍然返回原生 Shell
+         * 的结果。
          */
         return hrDrop;
     }
@@ -1592,7 +1754,8 @@ bool DesktopShellView::InitDragDrop()
         new DebugDropTarget(
             dt,
             _pShellView,
-            _hwndListView
+            _hwndListView,
+            this
         );
 
     dt->Release();
@@ -1616,9 +1779,311 @@ bool DesktopShellView::InitDragDrop()
     return true;
 }
 
+void DesktopShellView::RefreshListViewItems()
+{
+    if (!_hwndListView)
+        return;
+
+    int count =
+        ListView_GetItemCount(
+            _hwndListView
+        );
+
+    if (count <= 0)
+        return;
+
+    for (int i = 0; i < count; ++i)
+    {
+        LVITEM item;
+
+        ZeroMemory(
+            &item,
+            sizeof(item)
+        );
+
+        item.mask = LVIF_IMAGE;
+        item.iItem = i;
+        item.iImage = I_IMAGECALLBACK;
+
+        ListView_SetItem(
+            _hwndListView,
+            &item
+        );
+
+        ListView_Update(
+            _hwndListView,
+            i
+        );
+    }
+}
+
 void DesktopShellView::Refresh()
 {
-    _pShellView->Refresh();
+    if (!_hwndListView || !_pShellView)
+        return;
+
+    /*
+     * 1. 获取 IShellFolderView
+     */
+    IShellFolderView* pFolderView = NULL;
+
+    HRESULT hr =
+        _pShellView->QueryInterface(
+            IID_IShellFolderView_Local,
+            (void**)&pFolderView
+        );
+
+    if (FAILED(hr) || !pFolderView)
+        return;
+
+    /*
+     * 2. 保存当前自动排列状态
+     */
+    LONG_PTR style =
+        GetWindowLongPtr(
+            _hwndListView,
+            GWL_STYLE
+        );
+
+    bool autoArrange =
+        (style & LVS_AUTOARRANGE) != 0;
+
+    /*
+     * 3. 获取 Desktop Folder
+     */
+    IShellFolder* pDesktopFolder = NULL;
+
+    hr =
+        SHGetDesktopFolder(
+            &pDesktopFolder
+        );
+
+    if (FAILED(hr) || !pDesktopFolder)
+    {
+        pFolderView->Release();
+        return;
+    }
+
+    /*
+     * 4. 通知 Shell 验证内容
+     */
+    ULONG rgf = SFGAO_VALIDATE;
+
+    pDesktopFolder->GetAttributesOf(
+        0,
+        NULL,
+        &rgf
+    );
+
+    /*
+     * 5. 获取 Shell 当前显示设置
+     */
+    DWORD flags =
+        SHCONTF_FOLDERS |
+        SHCONTF_NONFOLDERS;
+
+    SHELLSTATE shellState;
+
+    ZeroMemory(
+        &shellState,
+        sizeof(shellState)
+    );
+
+    SHGetSetSettings(
+        &shellState,
+        SSF_SHOWALLOBJECTS |
+        SSF_SHOWSUPERHIDDEN,
+        FALSE
+    );
+
+    if (shellState.fShowAllObjects)
+    {
+        flags |= SHCONTF_INCLUDEHIDDEN;
+    }
+
+    if (shellState.fShowSuperHidden)
+    {
+        flags |= SHCONTF_INCLUDESUPERHIDDEN;
+    }
+
+    /*
+     * 6. 创建枚举器
+     */
+    IEnumIDList* pEnum = NULL;
+
+    hr =
+        pDesktopFolder->EnumObjects(
+            _hwndListView,
+            flags,
+            &pEnum
+        );
+
+    if (FAILED(hr) || !pEnum)
+    {
+        pDesktopFolder->Release();
+        pFolderView->Release();
+        return;
+    }
+
+    /*
+     * 7. 禁止 ListView 重绘
+     */
+    SendMessage(
+        _hwndListView,
+        WM_SETREDRAW,
+        FALSE,
+        0
+    );
+
+    /*
+     * 8. 一次性清空整个 ShellView
+     */
+    UINT item = 0;
+
+    hr =
+        pFolderView->RemoveObject(
+            NULL,
+            &item
+        );
+
+    if (FAILED(hr))
+    {
+        SendMessage(
+            _hwndListView,
+            WM_SETREDRAW,
+            TRUE,
+            0
+        );
+
+        InvalidateRect(
+            _hwndListView,
+            NULL,
+            TRUE
+        );
+
+        pEnum->Release();
+        pDesktopFolder->Release();
+        pFolderView->Release();
+
+        return;
+    }
+
+    /*
+     * 9. 批量枚举 + 立即 AddObject
+     *
+     * 一次最多取得 32 个 PIDL，
+     * 减少 IEnumIDList::Next() 调用次数。
+     */
+    const ULONG BATCH_SIZE = 32;
+
+    PITEMID_CHILD pidls[BATCH_SIZE];
+    ULONG fetched = 0;
+
+    for (;;)
+    {
+        fetched = 0;
+
+        hr =
+            pEnum->Next(
+                BATCH_SIZE,
+                pidls,
+                &fetched
+            );
+
+        /*
+         * 只要本次拿到了 PIDL，
+         * 就全部处理。
+         */
+        for (ULONG i = 0;
+            i < fetched;
+            ++i)
+        {
+            if (!pidls[i])
+                continue;
+
+            item = 0;
+
+            /*
+             * ShellView 自己处理对象。
+             */
+            pFolderView->AddObject(
+                pidls[i],
+                &item
+            );
+
+            /*
+             * AddObject 使用完原始 PIDL 后，
+             * 这里立即释放。
+             */
+            CoTaskMemFree(
+                pidls[i]
+            );
+
+            pidls[i] = NULL;
+        }
+
+        /*
+         * 只有 S_FALSE 才表示正常枚举结束。
+         *
+         * 不使用 fetched < BATCH_SIZE 判断。
+         */
+        if (hr == S_FALSE)
+            break;
+
+        /*
+         * 其它失败直接结束。
+         */
+        if (FAILED(hr))
+            break;
+    }
+
+    /*
+     * 10. 释放枚举器
+     */
+    pEnum->Release();
+    pEnum = NULL;
+
+    /*
+     * 11. 释放 Desktop Folder
+     */
+    pDesktopFolder->Release();
+    pDesktopFolder = NULL;
+
+    /*
+     * 12. 在仍然禁止重绘时恢复图标位置
+     */
+    if (!autoArrange)
+    {
+        RestoreIconPositions();
+    }
+
+    /*
+     * 13. 恢复 ListView 重绘
+     */
+    SendMessage(
+        _hwndListView,
+        WM_SETREDRAW,
+        TRUE,
+        0
+    );
+
+    /*
+     * 14. 请求重绘
+     *
+     * 不使用 UpdateWindow()，
+     * 避免在 Refresh 中强制同步执行 WM_PAINT。
+     */
+    InvalidateRect(
+        _hwndListView,
+        NULL,
+        TRUE
+    );
+
+    /*
+     * 15. 释放 ShellView
+     */
+    pFolderView->Release();
+    pFolderView = NULL;
 }
 
 // Function LoadAnImage: accepts a file name(JPG/GIF/BMP) and returns a HBITMAP.
@@ -2185,16 +2650,44 @@ HRESULT DesktopShellView::DoDesktopContextMenu(int x, int y)
     }
     UINT idCmd = TrackPopupMenu(hmenu, TPM_LEFTALIGN | TPM_RETURNCMD | TPM_RIGHTBUTTON, x, y, 0, _hwnd, NULL);
 
-    if (idCmd) {
-        IContextMenu *pcm = _cm_ifs._pctxmenu;
-        String menuname;
-        WCHAR namebuffer[MAX_PATH + 1] = { 0 };
-        if (idCmd >= FCIDM_WINXNEW) {
+    if (idCmd)
+    {
+        IContextMenu* pcm = _cm_ifs._pctxmenu;
+
+        UINT originalId = idCmd;
+
+        if (idCmd >= FCIDM_WINXNEW)
+        {
             pcm = cmNew_ifs._pctxmenu;
             idCmd -= FCIDM_WINXNEW;
         }
-        DoInvokeCommand(_hwnd, pcm, idCmd);
-        if (pcm != cmNew_ifs._pctxmenu) {
+
+        WCHAR verb[256] = { 0 };
+
+        HRESULT hrVerb =
+            pcm->GetCommandString(
+                idCmd,
+                GCS_VERBW,
+                NULL,
+                (CHAR*)verb,
+                256
+            );
+
+        if (SUCCEEDED(hrVerb) &&
+            _wcsicmp(verb, L"refresh") == 0)
+        {
+            //MessageBox(NULL, TEXT(""), TEXT(""), 0);
+                Refresh();
+                return S_OK;
+            
+        }
+        else
+        {
+            DoInvokeCommand(_hwnd, pcm, idCmd);
+        }
+
+        if (pcm != cmNew_ifs._pctxmenu)
+        {
             SetMenuCursorPos(-1, -1);
         }
     }
@@ -2403,4 +2896,450 @@ void DesktopShellView::PositionIcons(int dir)
     }
     //ListView_RedrawItems(_hwndListView, 0,all - 1);
     //UpdateWindow(_hwndListView);
+}
+
+void DesktopShellView::RestoreIconPositions()
+{
+    if (!_pShellView || !_hwndListView)
+        return;
+
+    IFolderView2* folderView = NULL;
+
+    HRESULT hr =
+        _pShellView->QueryInterface(
+            IID_IFolderView2,
+            (void**)&folderView
+        );
+
+    if (FAILED(hr) || !folderView)
+        return;
+
+    /*
+     * 当前 View 中的项目数量
+     */
+    int count =
+        ListView_GetItemCount(
+            _hwndListView
+        );
+
+    if (count <= 0)
+    {
+        folderView->Release();
+        return;
+    }
+
+    /*
+     * 打开位置文件
+     */
+    FILE* fp = NULL;
+
+    fopen_s(
+        &fp,
+        "desktop_positions.dat",
+        "rb"
+    );
+
+    if (!fp)
+    {
+        folderView->Release();
+        return;
+    }
+
+    /*
+     * 验证文件头
+     */
+    DWORD magic = 0;
+    DWORD version = 0;
+
+    if (fread(
+        &magic,
+        sizeof(magic),
+        1,
+        fp
+    ) != 1 ||
+        fread(
+            &version,
+            sizeof(version),
+            1,
+            fp
+        ) != 1 ||
+        magic != 0x534F5044 ||
+        version != 1)
+    {
+        fclose(fp);
+        folderView->Release();
+        return;
+    }
+
+    /*
+     * 保存的位置记录
+     */
+    struct SavedPosition
+    {
+        PITEMID_CHILD pidl;
+        POINT pt;
+        DWORD hash;
+    };
+
+    std::vector<SavedPosition> saved;
+
+    saved.reserve(
+        count
+    );
+
+    /*
+     * Hash -> saved record index
+     */
+    std::unordered_multimap<DWORD, size_t> savedMap;
+
+    savedMap.reserve(
+        count * 2 + 1
+    );
+
+    /*
+     * 读取保存的 PIDL + POINT
+     *
+     * 同时直接计算 Hash，
+     * 后面不再重复计算。
+     */
+    for (;;)
+    {
+        UINT pidlSize = 0;
+
+        if (fread(
+            &pidlSize,
+            sizeof(pidlSize),
+            1,
+            fp
+        ) != 1)
+        {
+            break;
+        }
+
+        /*
+         * 防止损坏文件导致异常分配
+         */
+        if (pidlSize == 0 ||
+            pidlSize > 1024 * 1024)
+        {
+            fclose(fp);
+
+            for (size_t i = 0;
+                i < saved.size();
+                ++i)
+            {
+                CoTaskMemFree(
+                    saved[i].pidl
+                );
+            }
+
+            folderView->Release();
+            return;
+        }
+
+        PITEMID_CHILD pidl =
+            (PITEMID_CHILD)CoTaskMemAlloc(
+                pidlSize
+            );
+
+        if (!pidl)
+        {
+            fclose(fp);
+
+            for (size_t i = 0;
+                i < saved.size();
+                ++i)
+            {
+                CoTaskMemFree(
+                    saved[i].pidl
+                );
+            }
+
+            folderView->Release();
+            return;
+        }
+
+        /*
+         * 读取 PIDL
+         */
+        if (fread(
+            pidl,
+            1,
+            pidlSize,
+            fp
+        ) != pidlSize)
+        {
+            CoTaskMemFree(pidl);
+            break;
+        }
+
+        /*
+         * 读取坐标
+         */
+        POINT pt;
+
+        if (fread(
+            &pt,
+            sizeof(pt),
+            1,
+            fp
+        ) != 1)
+        {
+            CoTaskMemFree(pidl);
+            break;
+        }
+
+        /*
+         * FNV-1a 32-bit
+         */
+        DWORD hash = 2166136261u;
+
+        const BYTE* data =
+            (const BYTE*)pidl;
+
+        for (UINT i = 0;
+            i < pidlSize;
+            ++i)
+        {
+            hash ^= data[i];
+            hash *= 16777619u;
+        }
+
+        SavedPosition item;
+
+        item.pidl = pidl;
+        item.pt = pt;
+        item.hash = hash;
+
+        saved.push_back(
+            item
+        );
+
+        savedMap.insert(
+            std::make_pair(
+                hash,
+                saved.size() - 1
+            )
+        );
+    }
+
+    fclose(fp);
+
+    if (saved.empty())
+    {
+        folderView->Release();
+        return;
+    }
+
+    /*
+     * =========================================================
+     * 枚举当前 View
+     * =========================================================
+     *
+     * 当前 PIDL 不再全部保存。
+     *
+     * 命中保存记录：
+     *     保存到 restorePidls / positions
+     *
+     * 不命中：
+     *     立即释放
+     */
+    IEnumIDList* pEnum = NULL;
+
+    hr =
+        folderView->Items(
+            SVGIO_ALLVIEW,
+            IID_IEnumIDList,
+            (void**)&pEnum
+        );
+
+    if (FAILED(hr) || !pEnum)
+    {
+        for (size_t i = 0;
+            i < saved.size();
+            ++i)
+        {
+            CoTaskMemFree(
+                saved[i].pidl
+            );
+        }
+
+        folderView->Release();
+        return;
+    }
+
+    /*
+     * 最终传给 SelectAndPositionItems()
+     */
+    std::vector<LPCITEMIDLIST> restorePidls;
+    std::vector<POINT> positions;
+
+    restorePidls.reserve(
+        saved.size()
+    );
+
+    positions.reserve(
+        saved.size()
+    );
+
+    const ULONG BATCH_SIZE = 32;
+
+    PITEMID_CHILD pidls[BATCH_SIZE];
+    ULONG fetched = 0;
+
+    for (;;)
+    {
+        fetched = 0;
+
+        hr =
+            pEnum->Next(
+                BATCH_SIZE,
+                pidls,
+                &fetched
+            );
+
+        if (FAILED(hr) || fetched == 0)
+            break;
+
+        for (ULONG i = 0;
+            i < fetched;
+            ++i)
+        {
+            PITEMID_CHILD pidl =
+                pidls[i];
+
+            if (!pidl)
+                continue;
+
+            /*
+             * 计算当前 PIDL Hash
+             */
+            UINT pidlSize =
+                ILGetSize(pidl);
+
+            DWORD hash = 2166136261u;
+
+            const BYTE* data =
+                (const BYTE*)pidl;
+
+            for (UINT j = 0;
+                j < pidlSize;
+                ++j)
+            {
+                hash ^= data[j];
+                hash *= 16777619u;
+            }
+
+            /*
+             * 只查 Hash 相同的保存记录
+             */
+            std::pair<
+                std::unordered_multimap<DWORD, size_t>::iterator,
+                std::unordered_multimap<DWORD, size_t>::iterator
+            > range =
+                savedMap.equal_range(
+                    hash
+                );
+
+            bool matched = false;
+
+            for (
+                std::unordered_multimap<DWORD, size_t>::iterator it =
+                range.first;
+                it != range.second;
+                ++it)
+            {
+                size_t savedIndex =
+                    it->second;
+
+                /*
+                 * Hash 相同后进行最终准确比较
+                 */
+                if (ILIsEqual(
+                    saved[savedIndex].pidl,
+                    pidl
+                ))
+                {
+                    restorePidls.push_back(
+                        (LPCITEMIDLIST)pidl
+                    );
+
+                    positions.push_back(
+                        saved[savedIndex].pt
+                    );
+
+                    matched = true;
+                    break;
+                }
+            }
+
+            /*
+             * 没有保存位置：
+             * 当前 PIDL 不需要保留。
+             */
+            if (!matched)
+            {
+                CoTaskMemFree(
+                    pidl
+                );
+            }
+
+            pidls[i] = NULL;
+        }
+
+        /*
+         * 只有明确返回 S_FALSE
+         * 才结束枚举。
+         */
+        if (hr == S_FALSE)
+            break;
+
+        if (FAILED(hr))
+            break;
+    }
+
+    pEnum->Release();
+    pEnum = NULL;
+
+    /*
+     * =========================================================
+     * 一次性恢复所有位置
+     * =========================================================
+     */
+    if (!restorePidls.empty())
+    {
+        folderView->SelectAndPositionItems(
+            (UINT)restorePidls.size(),
+            &restorePidls[0],
+            &positions[0],
+            SVSI_POSITIONITEM |
+            SVSI_NOTAKEFOCUS
+        );
+    }
+
+    /*
+     * 释放当前 View 中匹配成功的 PIDL
+     */
+    for (size_t i = 0;
+        i < restorePidls.size();
+        ++i)
+    {
+        CoTaskMemFree(
+            (LPVOID)restorePidls[i]
+        );
+    }
+
+    /*
+     * 释放保存文件中的 PIDL
+     */
+    for (size_t i = 0;
+        i < saved.size();
+        ++i)
+    {
+        CoTaskMemFree(
+            saved[i].pidl
+        );
+    }
+
+    folderView->Release();
 }
