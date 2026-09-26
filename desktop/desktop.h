@@ -74,6 +74,7 @@ typedef struct DesktopShellView :
 
     POINT GetMenuCursorPos();
     void SetMenuCursorPos(LONG x, LONG y);
+    void SaveIconPositions();
 
     void RestoreIconPositions();
 

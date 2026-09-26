@@ -1254,149 +1254,6 @@ struct DebugDropTarget : public IDropTarget
         return _inner->DragLeave();
     }
 
-    void SaveIconPositions()
-    {
-        if (!_folderView || !_hwndListView)
-            return;
-
-        FILE* fp = NULL;
-
-        fopen_s(
-            &fp,
-            "desktop_positions.dat",
-            "wb"
-        );
-
-        if (!fp)
-            return;
-
-        /*
-         * 文件头
-         *
-         * Magic: "DPOS"
-         * Version: 1
-         */
-        const DWORD magic = 0x534F5044;
-        const DWORD version = 1;
-
-        if (fwrite(
-            &magic,
-            sizeof(magic),
-            1,
-            fp
-        ) != 1)
-        {
-            fclose(fp);
-            return;
-        }
-
-        if (fwrite(
-            &version,
-            sizeof(version),
-            1,
-            fp
-        ) != 1)
-        {
-            fclose(fp);
-            return;
-        }
-
-        int count =
-            ListView_GetItemCount(
-                _hwndListView
-            );
-
-        for (int i = 0;
-            i < count;
-            ++i)
-        {
-            /*
-             * 获取当前 Item 对应的 PIDL
-             */
-            PITEMID_CHILD pidl = NULL;
-
-            HRESULT hr =
-                _folderView->Item(
-                    i,
-                    &pidl
-                );
-
-            if (FAILED(hr) || !pidl)
-                continue;
-
-            /*
-             * 获取图标位置
-             */
-            POINT pt;
-
-            if (FAILED(
-                _folderView->GetItemPosition(
-                    pidl,
-                    &pt
-                )))
-            {
-                CoTaskMemFree(pidl);
-                continue;
-            }
-
-            /*
-             * 获取 PIDL 的完整二进制大小
-             */
-            UINT pidlSize =
-                ILGetSize(pidl);
-
-            if (pidlSize == 0)
-            {
-                CoTaskMemFree(pidl);
-                continue;
-            }
-
-            /*
-             * 保存：
-             *
-             * pidlSize
-             * pidl
-             * POINT
-             */
-            if (fwrite(
-                &pidlSize,
-                sizeof(pidlSize),
-                1,
-                fp
-            ) != 1)
-            {
-                CoTaskMemFree(pidl);
-                break;
-            }
-
-            if (fwrite(
-                pidl,
-                1,
-                pidlSize,
-                fp
-            ) != pidlSize)
-            {
-                CoTaskMemFree(pidl);
-                break;
-            }
-
-            if (fwrite(
-                &pt,
-                sizeof(pt),
-                1,
-                fp
-            ) != 1)
-            {
-                CoTaskMemFree(pidl);
-                break;
-            }
-
-            CoTaskMemFree(pidl);
-        }
-
-        fclose(fp);
-    }
-
     HRESULT STDMETHODCALLTYPE Drop(
         IDataObject* data,
         DWORD key,
@@ -1602,8 +1459,10 @@ struct DebugDropTarget : public IDropTarget
         /*
         * 8. Save position
         * */
-        SaveIconPositions();
-
+        if (_desktopShellView)
+        {
+            _desktopShellView->SaveIconPositions();
+        }
         /*
          * 9. 清理本次拖动的数据。
          */
@@ -2693,26 +2552,6 @@ HRESULT DesktopShellView::DoDesktopContextMenu(int x, int y)
             }
             else
             {
-                WCHAR menuText[256] = { 0 };
-
-                GetMenuStringW(
-                    hmenu,
-                    idCmd,
-                    menuText,
-                    _countof(menuText),
-                    MF_BYCOMMAND
-                );
-
-                if (_wcsicmp(menuText, L"名称") == 0 ||
-                    _wcsicmp(menuText, L"大小") == 0 ||
-                    _wcsicmp(menuText, L"项目类型") == 0 ||
-                    _wcsicmp(menuText, L"修改日期") == 0)
-                {
-                    DeleteFile(
-                        TEXT("desktop_positions.dat")
-                    );
-                }
-
                 DoInvokeCommand(
                     _hwnd,
                     pcm,
@@ -2930,6 +2769,166 @@ void DesktopShellView::PositionIcons(int dir)
     }
     //ListView_RedrawItems(_hwndListView, 0,all - 1);
     //UpdateWindow(_hwndListView);
+}
+
+void DesktopShellView::SaveIconPositions()
+{
+    if (!_pShellView || !_hwndListView)
+        return;
+
+    IFolderView2* folderView = NULL;
+
+    HRESULT hr =
+        _pShellView->QueryInterface(
+            IID_IFolderView2,
+            (void**)&folderView
+        );
+
+    if (FAILED(hr) || !folderView)
+        return;
+
+    FILE* fp = NULL;
+
+    fopen_s(
+        &fp,
+        "desktop_positions.dat",
+        "wb"
+    );
+
+    if (!fp)
+    {
+        folderView->Release();
+        return;
+    }
+
+    /*
+     * 文件头
+     *
+     * Magic: "DPOS"
+     * Version: 1
+     */
+    const DWORD magic = 0x534F5044;
+    const DWORD version = 1;
+
+    if (fwrite(
+        &magic,
+        sizeof(magic),
+        1,
+        fp
+    ) != 1)
+    {
+        fclose(fp);
+        folderView->Release();
+        return;
+    }
+
+    if (fwrite(
+        &version,
+        sizeof(version),
+        1,
+        fp
+    ) != 1)
+    {
+        fclose(fp);
+        folderView->Release();
+        return;
+    }
+
+    int count =
+        ListView_GetItemCount(
+            _hwndListView
+        );
+
+    for (int i = 0;
+        i < count;
+        ++i)
+    {
+        /*
+         * 获取当前 Item 对应的 PIDL
+         */
+        PITEMID_CHILD pidl = NULL;
+
+        hr =
+            folderView->Item(
+                i,
+                &pidl
+            );
+
+        if (FAILED(hr) || !pidl)
+            continue;
+
+        /*
+         * 获取图标位置
+         */
+        POINT pt;
+
+        if (FAILED(
+            folderView->GetItemPosition(
+                pidl,
+                &pt
+            )))
+        {
+            CoTaskMemFree(pidl);
+            continue;
+        }
+
+        /*
+         * 获取 PIDL 的完整二进制大小
+         */
+        UINT pidlSize =
+            ILGetSize(pidl);
+
+        if (pidlSize == 0)
+        {
+            CoTaskMemFree(pidl);
+            continue;
+        }
+
+        /*
+         * 保存：
+         *
+         * pidlSize
+         * pidl
+         * POINT
+         */
+        if (fwrite(
+            &pidlSize,
+            sizeof(pidlSize),
+            1,
+            fp
+        ) != 1)
+        {
+            CoTaskMemFree(pidl);
+            break;
+        }
+
+        if (fwrite(
+            pidl,
+            1,
+            pidlSize,
+            fp
+        ) != pidlSize)
+        {
+            CoTaskMemFree(pidl);
+            break;
+        }
+
+        if (fwrite(
+            &pt,
+            sizeof(pt),
+            1,
+            fp
+        ) != 1)
+        {
+            CoTaskMemFree(pidl);
+            break;
+        }
+
+        CoTaskMemFree(pidl);
+    }
+
+    fclose(fp);
+    folderView->Release();
 }
 
 void DesktopShellView::RestoreIconPositions()
